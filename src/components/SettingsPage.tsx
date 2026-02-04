@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, Trash2, Edit3, Check, X, Upload, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Edit3, Check, X, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -51,11 +51,22 @@ export function SettingsPage({
   const [newCardImage, setNewCardImage] = useState('');
   const [newCardCategory, setNewCardCategory] = useState(categories[0]?.id || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Edit card form state
+  const [editCardWord, setEditCardWord] = useState('');
+  const [editCardImage, setEditCardImage] = useState('');
+  const [editCardCategory, setEditCardCategory] = useState('');
 
   // New category form state
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryIcon, setNewCategoryIcon] = useState(emojiOptions[0]);
   const [newCategoryColor, setNewCategoryColor] = useState<Category['color']>('coral');
+
+  // Edit category form state
+  const [editCategoryName, setEditCategoryName] = useState('');
+  const [editCategoryIcon, setEditCategoryIcon] = useState('');
+  const [editCategoryColor, setEditCategoryColor] = useState<Category['color']>('coral');
 
   const handleAddCard = () => {
     if (newCardWord.trim() && newCardImage.trim() && newCardCategory) {
@@ -68,6 +79,31 @@ export function SettingsPage({
       setNewCardImage('');
       setIsAddingCard(false);
     }
+  };
+
+  const handleStartEditCard = (card: Flashcard) => {
+    setEditingCardId(card.id);
+    setEditCardWord(card.word);
+    setEditCardImage(card.imageUrl);
+    setEditCardCategory(card.categoryId);
+  };
+
+  const handleSaveEditCard = () => {
+    if (editingCardId && editCardWord.trim() && editCardImage.trim()) {
+      onUpdateCard(editingCardId, {
+        word: editCardWord.trim(),
+        imageUrl: editCardImage.trim(),
+        categoryId: editCardCategory,
+      });
+      setEditingCardId(null);
+    }
+  };
+
+  const handleCancelEditCard = () => {
+    setEditingCardId(null);
+    setEditCardWord('');
+    setEditCardImage('');
+    setEditCardCategory('');
   };
 
   const handleAddCategory = () => {
@@ -84,12 +120,48 @@ export function SettingsPage({
     }
   };
 
+  const handleStartEditCategory = (category: Category) => {
+    setEditingCategoryId(category.id);
+    setEditCategoryName(category.name);
+    setEditCategoryIcon(category.icon);
+    setEditCategoryColor(category.color);
+  };
+
+  const handleSaveEditCategory = () => {
+    if (editingCategoryId && editCategoryName.trim()) {
+      onUpdateCategory(editingCategoryId, {
+        name: editCategoryName.trim(),
+        icon: editCategoryIcon,
+        color: editCategoryColor,
+      });
+      setEditingCategoryId(null);
+    }
+  };
+
+  const handleCancelEditCategory = () => {
+    setEditingCategoryId(null);
+    setEditCategoryName('');
+    setEditCategoryIcon('');
+    setEditCategoryColor('coral');
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setNewCardImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleEditImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setEditCardImage(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
@@ -185,7 +257,7 @@ export function SettingsPage({
               <select
                 value={newCardCategory}
                 onChange={(e) => setNewCardCategory(e.target.value)}
-                className="w-full h-12 rounded-xl border border-input bg-background px-4 text-lg"
+                className="w-full h-12 rounded-xl border border-input bg-card px-4 text-lg"
               >
                 {categories.map((cat) => (
                   <option key={cat.id} value={cat.id}>
@@ -217,6 +289,84 @@ export function SettingsPage({
           <div className="space-y-2">
             {cards.map((card) => {
               const category = categories.find((c) => c.id === card.categoryId);
+              const isEditing = editingCardId === card.id;
+
+              if (isEditing) {
+                return (
+                  <motion.div
+                    key={card.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="bg-card rounded-2xl p-4 card-shadow space-y-4"
+                  >
+                    <Input
+                      placeholder="Word"
+                      value={editCardWord}
+                      onChange={(e) => setEditCardWord(e.target.value)}
+                      className="h-12 rounded-xl text-lg"
+                    />
+
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Image URL"
+                        value={editCardImage}
+                        onChange={(e) => setEditCardImage(e.target.value)}
+                        className="h-12 rounded-xl flex-1"
+                      />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        ref={editFileInputRef}
+                        onChange={handleEditImageUpload}
+                        className="hidden"
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={() => editFileInputRef.current?.click()}
+                        className="h-12 px-4 rounded-xl"
+                      >
+                        <Upload className="w-5 h-5" />
+                      </Button>
+                    </div>
+
+                    {editCardImage && (
+                      <div className="relative w-24 h-24 rounded-xl overflow-hidden bg-muted">
+                        <img src={editCardImage} alt="Preview" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+
+                    <select
+                      value={editCardCategory}
+                      onChange={(e) => setEditCardCategory(e.target.value)}
+                      className="w-full h-12 rounded-xl border border-input bg-card px-4 text-lg"
+                    >
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.icon} {cat.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={handleSaveEditCard}
+                        className="flex-1 h-12 bg-secondary text-secondary-foreground rounded-xl font-semibold"
+                      >
+                        <Check className="w-5 h-5 mr-2" />
+                        Save
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={handleCancelEditCard}
+                        className="h-12 px-6 rounded-xl"
+                      >
+                        <X className="w-5 h-5" />
+                      </Button>
+                    </div>
+                  </motion.div>
+                );
+              }
+
               return (
                 <Card key={card.id} className="p-3 rounded-2xl flex items-center gap-3">
                   <div className="w-16 h-16 rounded-xl overflow-hidden bg-muted flex-shrink-0">
@@ -228,6 +378,12 @@ export function SettingsPage({
                       {category?.icon} {category?.name}
                     </p>
                   </div>
+                  <button
+                    onClick={() => handleStartEditCard(card)}
+                    className="w-10 h-10 rounded-xl bg-sky/20 flex items-center justify-center"
+                  >
+                    <Edit3 className="w-5 h-5 text-sky" />
+                  </button>
                   <button
                     onClick={() => onDeleteCard(card.id)}
                     className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center"
@@ -322,27 +478,108 @@ export function SettingsPage({
 
           {/* Category List */}
           <div className="space-y-2">
-            {categories.map((category) => (
-              <Card key={category.id} className="p-3 rounded-2xl flex items-center gap-3">
-                <div
-                  className={`w-14 h-14 rounded-xl bg-${category.color} flex items-center justify-center text-2xl`}
-                >
-                  {category.icon}
-                </div>
-                <div className="flex-1">
-                  <p className="font-bold text-lg">{category.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {getCardCountForCategory(category.id)} cards
-                  </p>
-                </div>
-                <button
-                  onClick={() => onDeleteCategory(category.id)}
-                  className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center"
-                >
-                  <Trash2 className="w-5 h-5 text-destructive" />
-                </button>
-              </Card>
-            ))}
+            {categories.map((category) => {
+              const isEditing = editingCategoryId === category.id;
+
+              if (isEditing) {
+                return (
+                  <motion.div
+                    key={category.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="bg-card rounded-2xl p-4 card-shadow space-y-4"
+                  >
+                    <Input
+                      placeholder="Category Name"
+                      value={editCategoryName}
+                      onChange={(e) => setEditCategoryName(e.target.value)}
+                      className="h-12 rounded-xl text-lg"
+                    />
+
+                    <div>
+                      <Label className="text-sm font-semibold mb-2 block">Icon</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {emojiOptions.map((emoji) => (
+                          <button
+                            key={emoji}
+                            onClick={() => setEditCategoryIcon(emoji)}
+                            className={`w-12 h-12 rounded-xl text-2xl flex items-center justify-center transition-all ${
+                              editCategoryIcon === emoji
+                                ? 'bg-primary ring-2 ring-primary ring-offset-2'
+                                : 'bg-muted'
+                            }`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label className="text-sm font-semibold mb-2 block">Color</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {colorOptions.map((color) => (
+                          <button
+                            key={color}
+                            onClick={() => setEditCategoryColor(color)}
+                            className={`w-12 h-12 rounded-xl bg-${color} transition-all ${
+                              editCategoryColor === color
+                                ? 'ring-2 ring-foreground ring-offset-2'
+                                : ''
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={handleSaveEditCategory}
+                        className="flex-1 h-12 bg-secondary text-secondary-foreground rounded-xl font-semibold"
+                      >
+                        <Check className="w-5 h-5 mr-2" />
+                        Save
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={handleCancelEditCategory}
+                        className="h-12 px-6 rounded-xl"
+                      >
+                        <X className="w-5 h-5" />
+                      </Button>
+                    </div>
+                  </motion.div>
+                );
+              }
+
+              return (
+                <Card key={category.id} className="p-3 rounded-2xl flex items-center gap-3">
+                  <div
+                    className={`w-14 h-14 rounded-xl bg-${category.color} flex items-center justify-center text-2xl`}
+                  >
+                    {category.icon}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-bold text-lg">{category.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {getCardCountForCategory(category.id)} cards
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleStartEditCategory(category)}
+                    className="w-10 h-10 rounded-xl bg-sky/20 flex items-center justify-center"
+                  >
+                    <Edit3 className="w-5 h-5 text-sky" />
+                  </button>
+                  <button
+                    onClick={() => onDeleteCategory(category.id)}
+                    className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center"
+                  >
+                    <Trash2 className="w-5 h-5 text-destructive" />
+                  </button>
+                </Card>
+              );
+            })}
           </div>
         </div>
       )}
