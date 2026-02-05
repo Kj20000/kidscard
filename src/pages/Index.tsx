@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings } from 'lucide-react';
+import { Settings, Loader2 } from 'lucide-react';
 import { CategoryCard } from '@/components/CategoryCard';
 import { CardViewer } from '@/components/CardViewer';
 import { SettingsPage } from '@/components/SettingsPage';
@@ -15,6 +15,7 @@ const Index = () => {
     categories,
     cards,
     settings,
+    isLoading,
     getCardsByCategory,
     addCard,
     updateCard,
@@ -47,6 +48,21 @@ const Index = () => {
     setView('home');
     setSelectedCategory(null);
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center gap-4"
+        >
+          <Loader2 className="w-12 h-12 text-primary animate-spin" />
+          <p className="text-lg font-semibold text-muted-foreground">Loading flashcards...</p>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background font-nunito">

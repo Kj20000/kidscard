@@ -1,155 +1,203 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Flashcard, Category, AppSettings } from '@/types/flashcard';
+import { useOfflineStorage } from './useOfflineStorage';
+import { useFlashcardSync, ENABLE_CLOUD_SYNC } from './useFlashcardSync';
 
-const STORAGE_KEYS = {
-  CATEGORIES: 'flashcard_categories',
-  CARDS: 'flashcard_cards',
-  SETTINGS: 'flashcard_settings',
-};
-
-const DEFAULT_CATEGORIES: Category[] = [
-  { id: 'animals', name: 'Animals', icon: '🐾', color: 'coral' },
-  { id: 'colors', name: 'Colors', icon: '🎨', color: 'sky' },
-  { id: 'numbers', name: 'Numbers', icon: '🔢', color: 'mint' },
-  { id: 'food', name: 'Food', icon: '🍎', color: 'sunshine' },
-  { id: 'shapes', name: 'Shapes', icon: '⭐', color: 'lavender' },
-  { id: 'nature', name: 'Nature', icon: '🌸', color: 'peach' },
-];
-
-const DEFAULT_CARDS: Flashcard[] = [
-  // Animals
-  { id: 'a1', word: 'Cat', imageUrl: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&h=400&fit=crop', categoryId: 'animals' },
-  { id: 'a2', word: 'Dog', imageUrl: 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=400&h=400&fit=crop', categoryId: 'animals' },
-  { id: 'a3', word: 'Bird', imageUrl: 'https://images.unsplash.com/photo-1444464666168-49d633b86797?w=400&h=400&fit=crop', categoryId: 'animals' },
-  { id: 'a4', word: 'Fish', imageUrl: 'https://images.unsplash.com/photo-1524704654690-b56c05c78a00?w=400&h=400&fit=crop', categoryId: 'animals' },
-  { id: 'a5', word: 'Elephant', imageUrl: 'https://images.unsplash.com/photo-1557050543-4d5f4e07ef46?w=400&h=400&fit=crop', categoryId: 'animals' },
-  // Colors
-  { id: 'c1', word: 'Red', imageUrl: 'https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=400&h=400&fit=crop&color=ff0000', categoryId: 'colors' },
-  { id: 'c2', word: 'Blue', imageUrl: 'https://images.unsplash.com/photo-1558470598-a5dda9640f68?w=400&h=400&fit=crop', categoryId: 'colors' },
-  { id: 'c3', word: 'Yellow', imageUrl: 'https://images.unsplash.com/photo-1495542779398-9fec7dc7986c?w=400&h=400&fit=crop', categoryId: 'colors' },
-  { id: 'c4', word: 'Green', imageUrl: 'https://images.unsplash.com/photo-1564419320461-6870880221ad?w=400&h=400&fit=crop', categoryId: 'colors' },
-  // Numbers
-  { id: 'n1', word: 'One', imageUrl: 'https://images.unsplash.com/photo-1586282391129-76a6df230234?w=400&h=400&fit=crop', categoryId: 'numbers' },
-  { id: 'n2', word: 'Two', imageUrl: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=400&fit=crop', categoryId: 'numbers' },
-  { id: 'n3', word: 'Three', imageUrl: 'https://images.unsplash.com/photo-1546552768-9e3a94b38a59?w=400&h=400&fit=crop', categoryId: 'numbers' },
-  // Food
-  { id: 'f1', word: 'Apple', imageUrl: 'https://images.unsplash.com/photo-1568702846914-96b305d2uj69?w=400&h=400&fit=crop', categoryId: 'food' },
-  { id: 'f2', word: 'Banana', imageUrl: 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&h=400&fit=crop', categoryId: 'food' },
-  { id: 'f3', word: 'Orange', imageUrl: 'https://images.unsplash.com/photo-1547514701-42782101795e?w=400&h=400&fit=crop', categoryId: 'food' },
-  // Shapes
-  { id: 's1', word: 'Circle', imageUrl: 'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?w=400&h=400&fit=crop', categoryId: 'shapes' },
-  { id: 's2', word: 'Star', imageUrl: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=400&h=400&fit=crop', categoryId: 'shapes' },
-  // Nature
-  { id: 'na1', word: 'Flower', imageUrl: 'https://images.unsplash.com/photo-1490750967868-88aa4486c946?w=400&h=400&fit=crop', categoryId: 'nature' },
-  { id: 'na2', word: 'Tree', imageUrl: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=400&h=400&fit=crop', categoryId: 'nature' },
-  { id: 'na3', word: 'Sun', imageUrl: 'https://images.unsplash.com/photo-1495107334309-fcf20504a5ab?w=400&h=400&fit=crop', categoryId: 'nature' },
-];
-
-const DEFAULT_SETTINGS: AppSettings = {
-  autoPlayAudio: true,
-  voiceSpeed: 'normal',
-};
-
-function loadFromStorage<T>(key: string, defaultValue: T): T {
-  try {
-    const stored = localStorage.getItem(key);
-    return stored ? JSON.parse(stored) : defaultValue;
-  } catch {
-    return defaultValue;
-  }
-}
-
-function saveToStorage<T>(key: string, value: T): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (e) {
-    console.error('Failed to save to localStorage:', e);
-  }
-}
 
 export function useFlashcards() {
-  const [categories, setCategories] = useState<Category[]>(() =>
-    loadFromStorage(STORAGE_KEYS.CATEGORIES, DEFAULT_CATEGORIES)
-  );
-  const [cards, setCards] = useState<Flashcard[]>(() =>
-    loadFromStorage(STORAGE_KEYS.CARDS, DEFAULT_CARDS)
-  );
-  const [settings, setSettings] = useState<AppSettings>(() =>
-    loadFromStorage(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS)
-  );
+  const storage = useOfflineStorage();
+  const sync = useFlashcardSync();
+  
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [cards, setCards] = useState<Flashcard[]>([]);
+  const [settings, setSettings] = useState<AppSettings>({
+    autoPlayAudio: true,
+    voiceSpeed: 'normal',
+    enableCloudSync: false,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const initialized = useRef(false);
 
-  // Persist to localStorage
+  // Load data from IndexedDB on mount
   useEffect(() => {
-    saveToStorage(STORAGE_KEYS.CATEGORIES, categories);
-  }, [categories]);
+    const loadData = async () => {
+      if (initialized.current) return;
+      initialized.current = true;
+      
+      try {
+        const [loadedCategories, loadedCards, loadedSettings] = await Promise.all([
+          storage.getAllCategories(),
+          storage.getAllCards(),
+          storage.getSettings(),
+        ]);
+        
+        setCategories(loadedCategories);
+        setCards(loadedCards);
+        setSettings(loadedSettings);
+      } catch (error) {
+        console.error('Failed to load data from IndexedDB:', error);
+        // Fall back to defaults
+        setCategories(storage.DEFAULT_CATEGORIES);
+        setCards(storage.DEFAULT_CARDS);
+        setSettings(storage.DEFAULT_SETTINGS);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  useEffect(() => {
-    saveToStorage(STORAGE_KEYS.CARDS, cards);
-  }, [cards]);
-
-  useEffect(() => {
-    saveToStorage(STORAGE_KEYS.SETTINGS, settings);
-  }, [settings]);
+    loadData();
+  }, [storage]);
 
   const getCardsByCategory = useCallback(
     (categoryId: string) => cards.filter((card) => card.categoryId === categoryId),
     [cards]
   );
 
-  const addCard = useCallback((card: Omit<Flashcard, 'id'>) => {
+  const addCard = useCallback(async (card: Omit<Flashcard, 'id'>) => {
+    const now = Date.now();
     const newCard: Flashcard = {
       ...card,
       id: `card_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      createdAt: now,
+      updatedAt: now,
+      syncStatus: 'pending',
     };
-    setCards((prev) => [...prev, newCard]);
+    
+    const updatedCards = [...cards, newCard];
+    setCards(updatedCards);
+    
+    // Save to IndexedDB (non-blocking for UI)
+    storage.saveAllCards(updatedCards).then(() => {
+      sync.updatePendingCount();
+      // Trigger background sync if enabled
+      if (ENABLE_CLOUD_SYNC && sync.syncState.isOnline) {
+        sync.syncToCloud();
+      }
+    });
+    
     return newCard;
-  }, []);
+  }, [cards, storage, sync]);
 
-  const updateCard = useCallback((id: string, updates: Partial<Omit<Flashcard, 'id'>>) => {
-    setCards((prev) =>
-      prev.map((card) => (card.id === id ? { ...card, ...updates } : card))
+  const updateCard = useCallback(async (id: string, updates: Partial<Omit<Flashcard, 'id'>>) => {
+    const updatedCards = cards.map((card) =>
+      card.id === id
+        ? { ...card, ...updates, updatedAt: Date.now(), syncStatus: 'pending' as const }
+        : card
     );
-  }, []);
+    setCards(updatedCards);
+    
+    // Save to IndexedDB
+    storage.saveAllCards(updatedCards).then(() => {
+      sync.updatePendingCount();
+      if (ENABLE_CLOUD_SYNC && sync.syncState.isOnline) {
+        sync.syncToCloud();
+      }
+    });
+  }, [cards, storage, sync]);
 
-  const deleteCard = useCallback((id: string) => {
-    setCards((prev) => prev.filter((card) => card.id !== id));
-  }, []);
+  const deleteCard = useCallback(async (id: string) => {
+    const updatedCards = cards.filter((card) => card.id !== id);
+    setCards(updatedCards);
+    
+    // Delete from IndexedDB
+    storage.deleteCard(id).then(() => {
+      sync.updatePendingCount();
+    });
+  }, [cards, storage, sync]);
 
-  const addCategory = useCallback((category: Omit<Category, 'id'>) => {
+  const addCategory = useCallback(async (category: Omit<Category, 'id'>) => {
+    const now = Date.now();
     const newCategory: Category = {
       ...category,
       id: `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      createdAt: now,
+      updatedAt: now,
+      syncStatus: 'pending',
     };
-    setCategories((prev) => [...prev, newCategory]);
+    
+    const updatedCategories = [...categories, newCategory];
+    setCategories(updatedCategories);
+    
+    storage.saveAllCategories(updatedCategories).then(() => {
+      sync.updatePendingCount();
+      if (ENABLE_CLOUD_SYNC && sync.syncState.isOnline) {
+        sync.syncToCloud();
+      }
+    });
+    
     return newCategory;
-  }, []);
+  }, [categories, storage, sync]);
 
-  const updateCategory = useCallback((id: string, updates: Partial<Omit<Category, 'id'>>) => {
-    setCategories((prev) =>
-      prev.map((cat) => (cat.id === id ? { ...cat, ...updates } : cat))
+  const updateCategory = useCallback(async (id: string, updates: Partial<Omit<Category, 'id'>>) => {
+    const updatedCategories = categories.map((cat) =>
+      cat.id === id
+        ? { ...cat, ...updates, updatedAt: Date.now(), syncStatus: 'pending' as const }
+        : cat
     );
-  }, []);
+    setCategories(updatedCategories);
+    
+    storage.saveAllCategories(updatedCategories).then(() => {
+      sync.updatePendingCount();
+      if (ENABLE_CLOUD_SYNC && sync.syncState.isOnline) {
+        sync.syncToCloud();
+      }
+    });
+  }, [categories, storage, sync]);
 
-  const deleteCategory = useCallback((id: string) => {
-    setCategories((prev) => prev.filter((cat) => cat.id !== id));
+  const deleteCategory = useCallback(async (id: string) => {
+    const updatedCategories = categories.filter((cat) => cat.id !== id);
+    setCategories(updatedCategories);
+    
     // Also delete all cards in this category
-    setCards((prev) => prev.filter((card) => card.categoryId !== id));
-  }, []);
+    const updatedCards = cards.filter((card) => card.categoryId !== id);
+    setCards(updatedCards);
+    
+    Promise.all([
+      storage.saveAllCategories(updatedCategories),
+      storage.saveAllCards(updatedCards),
+    ]).then(() => {
+      sync.updatePendingCount();
+    });
+  }, [categories, cards, storage, sync]);
 
-  const updateSettings = useCallback((updates: Partial<AppSettings>) => {
-    setSettings((prev) => ({ ...prev, ...updates }));
-  }, []);
+  const updateSettings = useCallback(async (updates: Partial<AppSettings>) => {
+    const newSettings = { ...settings, ...updates };
+    setSettings(newSettings);
+    storage.saveSettings(newSettings);
+  }, [settings, storage]);
 
-  const resetToDefaults = useCallback(() => {
-    setCategories(DEFAULT_CATEGORIES);
-    setCards(DEFAULT_CARDS);
-    setSettings(DEFAULT_SETTINGS);
-  }, []);
+  const resetToDefaults = useCallback(async () => {
+    setCategories(storage.DEFAULT_CATEGORIES);
+    setCards(storage.DEFAULT_CARDS);
+    setSettings(storage.DEFAULT_SETTINGS);
+    await storage.resetToDefaults();
+  }, [storage]);
+
+  // Save local image and optionally sync to cloud
+  const saveCardImage = useCallback(async (cardId: string, imageData: string): Promise<string> => {
+    // Always save locally first
+    await storage.saveImage(cardId, imageData);
+    
+    // Return local data URL for immediate use
+    // If cloud sync is enabled, it will upload in background
+    if (ENABLE_CLOUD_SYNC && sync.syncState.isOnline) {
+      sync.uploadImage(cardId, imageData);
+    }
+    
+    return imageData;
+  }, [storage, sync]);
+
+  // Get image, preferring local cache
+  const getCardImage = useCallback(async (cardId: string): Promise<string | undefined> => {
+    return storage.getImage(cardId);
+  }, [storage]);
 
   return {
     categories,
     cards,
     settings,
+    isLoading,
     getCardsByCategory,
     addCard,
     updateCard,
@@ -159,5 +207,14 @@ export function useFlashcards() {
     deleteCategory,
     updateSettings,
     resetToDefaults,
+    // Image operations
+    saveCardImage,
+    getCardImage,
+    // Sync state and operations
+    syncState: sync.syncState,
+    syncToCloud: sync.syncToCloud,
+    pullFromCloud: sync.pullFromCloud,
+    fullSync: sync.fullSync,
+    isCloudSyncEnabled: ENABLE_CLOUD_SYNC,
   };
 }
