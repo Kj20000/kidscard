@@ -1,18 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { FlashCard } from '@/components/FlashCard';
 import { useSpeech } from '@/hooks/useSpeech';
 import type { Flashcard, Category, AppSettings } from '@/types/flashcard';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface CardViewerProps {
   category: Category;
   cards: Flashcard[];
   settings: AppSettings;
   onBack: () => void;
+  allCategories?: Category[];
+  onCategoryChange?: (category: Category) => void;
 }
 
-export function CardViewer({ category, cards, settings, onBack }: CardViewerProps) {
+export function CardViewer({ category, cards, settings, onBack, allCategories = [], onCategoryChange }: CardViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const { speak } = useSpeech({ speed: settings.voiceSpeed });
 
@@ -77,10 +85,44 @@ export function CardViewer({ category, cards, settings, onBack }: CardViewerProp
           <ArrowLeft className="w-7 h-7" />
         </motion.button>
 
-        <div className="flex items-center gap-2 bg-card px-4 py-2 rounded-2xl card-shadow">
-          <span className="text-2xl">{category.icon}</span>
-          <span className="font-bold text-lg">{category.name}</span>
-        </div>
+        {allCategories.length > 1 && onCategoryChange ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <motion.button
+                className="flex items-center gap-2 bg-card px-4 py-3 rounded-2xl card-shadow cursor-pointer hover:bg-muted/50 transition-colors"
+                whileTap={{ scale: 0.97 }}
+              >
+                <span className="text-2xl">{category.icon}</span>
+                <span className="font-bold text-lg">{category.name}</span>
+                <ChevronDown className="w-5 h-5 text-muted-foreground" />
+              </motion.button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent 
+              align="center" 
+              className="w-56 bg-card border-border rounded-2xl p-2 z-50"
+            >
+              {allCategories.map((cat) => (
+                <DropdownMenuItem
+                  key={cat.id}
+                  onClick={() => onCategoryChange(cat)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-colors ${
+                    cat.id === category.id 
+                      ? 'bg-primary/20 text-foreground' 
+                      : 'hover:bg-muted'
+                  }`}
+                >
+                  <span className="text-xl">{cat.icon}</span>
+                  <span className="font-semibold">{cat.name}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <div className="flex items-center gap-2 bg-card px-4 py-2 rounded-2xl card-shadow">
+            <span className="text-2xl">{category.icon}</span>
+            <span className="font-bold text-lg">{category.name}</span>
+          </div>
+        )}
 
         <div className="w-14 h-14" /> {/* Spacer for centering */}
       </div>
