@@ -35,6 +35,10 @@ const Index = () => {
     setView('viewer');
   };
 
+  const handleCategoryChange = (category: Category) => {
+    setSelectedCategory(category);
+  };
+
   const handleSettingsClick = () => {
     setShowParentGate(true);
   };
@@ -136,6 +140,8 @@ const Index = () => {
               cards={getCardsByCategory(selectedCategory.id)}
               settings={settings}
               onBack={handleBack}
+              allCategories={categories}
+              onCategoryChange={handleCategoryChange}
             />
           </motion.div>
         )}
