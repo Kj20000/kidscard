@@ -1,12 +1,16 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, Trash2, Edit3, Check, X, Upload } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Edit3, Check, X, Upload, LogIn, LogOut, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import type { Category, Flashcard, AppSettings } from '@/types/flashcard';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface SettingsPageProps {
   categories: Category[];
@@ -22,7 +26,7 @@ interface SettingsPageProps {
   onBack: () => void;
 }
 
-type Tab = 'cards' | 'categories' | 'settings';
+type Tab = 'cards' | 'categories' | 'settings' | 'account';
 
 const colorOptions: Category['color'][] = ['coral', 'mint', 'sky', 'lavender', 'sunshine', 'peach'];
 const emojiOptions = ['🐾', '🎨', '🔢', '🍎', '⭐', '🌸', '🎵', '🚗', '🏠', '📚', '🎮', '⚽'];
@@ -40,11 +44,37 @@ export function SettingsPage({
   onDeleteCategory,
   onBack,
 }: SettingsPageProps) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>('cards');
+  const [user, setUser] = useState<SupabaseUser | null>(null);
   const [isAddingCard, setIsAddingCard] = useState(false);
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+
+  // Check auth state
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setUser(session?.user ?? null);
+      }
+    );
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSignOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error('Failed to sign out');
+    } else {
+      toast.success('Signed out successfully');
+    }
+  };
 
   // New card form state
   const [newCardWord, setNewCardWord] = useState('');
@@ -185,12 +215,12 @@ export function SettingsPage({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 bg-muted p-1 rounded-2xl">
-        {(['cards', 'categories', 'settings'] as Tab[]).map((tab) => (
+      <div className="flex gap-2 mb-6 bg-muted p-1 rounded-2xl overflow-x-auto">
+        {(['cards', 'categories', 'settings', 'account'] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-3 px-4 rounded-xl font-semibold text-sm transition-all ${
+            className={`flex-1 py-3 px-4 rounded-xl font-semibold text-sm transition-all whitespace-nowrap ${
               activeTab === tab
                 ? 'bg-card card-shadow text-foreground'
                 : 'text-muted-foreground'
@@ -634,6 +664,57 @@ export function SettingsPage({
               </div>
             </div>
           </Card>
+        </div>
+      )}
+
+      {/* Account Tab */}
+      {activeTab === 'account' && (
+        <div className="space-y-4">
+          {user ? (
+            <>
+              <Card className="p-6 rounded-2xl">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
+                    <User className="w-8 h-8 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-lg">Signed In</p>
+                    <p className="text-muted-foreground">{user.email}</p>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Your flashcards will sync to the cloud when you make changes.
+                </p>
+                <Button
+                  onClick={handleSignOut}
+                  variant="outline"
+                  className="w-full h-12 rounded-xl font-semibold"
+                >
+                  <LogOut className="w-5 h-5 mr-2" />
+                  Sign Out
+                </Button>
+              </Card>
+            </>
+          ) : (
+            <Card className="p-6 rounded-2xl">
+              <div className="text-center mb-6">
+                <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
+                  <User className="w-10 h-10 text-primary" />
+                </div>
+                <p className="font-bold text-xl mb-2">Sign in to Sync</p>
+                <p className="text-muted-foreground">
+                  Create an account to save your flashcards to the cloud and access them from any device.
+                </p>
+              </div>
+              <Button
+                onClick={() => navigate('/auth')}
+                className="w-full h-14 rounded-xl font-semibold text-lg"
+              >
+                <LogIn className="w-5 h-5 mr-2" />
+                Sign In or Create Account
+              </Button>
+            </Card>
+          )}
         </div>
       )}
     </div>
