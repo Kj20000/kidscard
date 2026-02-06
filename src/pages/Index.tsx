@@ -5,6 +5,7 @@ import { CategoryCard } from '@/components/CategoryCard';
 import { CardViewer } from '@/components/CardViewer';
 import { SettingsPage } from '@/components/SettingsPage';
 import { ParentGate } from '@/components/ParentGate';
+import { SyncButton } from '@/components/SyncButton';
 import { useFlashcards } from '@/hooks/useFlashcards';
 import type { Category } from '@/types/flashcard';
 
@@ -24,6 +25,9 @@ const Index = () => {
     updateCategory,
     deleteCategory,
     updateSettings,
+    syncState,
+    fullSync,
+    isCloudSyncEnabled,
   } = useFlashcards();
 
   const [view, setView] = useState<View>('home');
@@ -98,14 +102,21 @@ const Index = () => {
                   Tap a category to start learning!
                 </p>
               </div>
-              <motion.button
-                onClick={handleSettingsClick}
-                className="w-14 h-14 bg-card rounded-2xl card-shadow flex items-center justify-center"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <Settings className="w-7 h-7 text-muted-foreground" />
-              </motion.button>
+              <div className="flex items-center gap-3">
+                <SyncButton
+                  syncState={syncState}
+                  onSync={fullSync}
+                  isEnabled={isCloudSyncEnabled}
+                />
+                <motion.button
+                  onClick={handleSettingsClick}
+                  className="w-14 h-14 bg-card rounded-2xl card-shadow flex items-center justify-center"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Settings className="w-7 h-7 text-muted-foreground" />
+                </motion.button>
+              </div>
             </div>
 
             {/* Category Grid */}
