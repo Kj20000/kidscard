@@ -1,9 +1,10 @@
- import { useState, useEffect, useCallback, useRef } from 'react';
- import type { Flashcard, Category, SyncState } from '@/types/flashcard';
- import { useOfflineStorage } from './useOfflineStorage';
- 
- // Feature flag for cloud sync - set to false by default
- export const ENABLE_CLOUD_SYNC = false;
+import { useState, useEffect, useCallback, useRef } from 'react';
+import type { Flashcard, Category, SyncState } from '@/types/flashcard';
+import { useOfflineStorage } from './useOfflineStorage';
+import { supabase } from '@/integrations/supabase/client';
+
+// Feature flag for cloud sync - now enabled!
+export const ENABLE_CLOUD_SYNC = true;
  
  interface SyncResult {
    success: boolean;
