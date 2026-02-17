@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { Volume2 } from 'lucide-react';
 import type { Flashcard } from '@/types/flashcard';
+import { useHaptics } from '@/hooks/useHaptics';
 
 interface FlashCardProps {
   card: Flashcard;
@@ -14,22 +15,19 @@ interface FlashCardProps {
 }
 
 export function FlashCard({ card, onSpeak, onSwipeLeft, onSwipeRight, isFirst = false, isLast = false }: FlashCardProps) {
+  const SWIPE_OFFSET_THRESHOLD = 85;
+  const SWIPE_VELOCITY_THRESHOLD = 520;
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-220, 0, 220], [-10, 0, 10]);
   const rawScale = useTransform(x, [-220, 0, 220], [0.96, 1, 0.96]);
   const scale = useSpring(rawScale, { stiffness: 350, damping: 28, mass: 0.45 });
   const hapticStartedRef = useRef(false);
   const thresholdCrossedRef = useRef(false);
+  const hasDraggedRef = useRef(false);
   const haloTimerRef = useRef<number | null>(null);
   const [isHaloVisible, setIsHaloVisible] = useState(false);
   const [haloPulseKey, setHaloPulseKey] = useState(0);
-
-  // Haptic feedback helper
-  const triggerHaptic = (pattern: number | number[] = 10) => {
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate(pattern);
-    }
-  };
+  const { triggerHaptic } = useHaptics();
 
   // Generate a gradient background based on card properties
   const gradients = [
@@ -44,14 +42,14 @@ export function FlashCard({ card, onSpeak, onSwipeLeft, onSwipeRight, isFirst = 
   // Use card id to pick a consistent gradient
   const gradientIndex = card.id.charCodeAt(0) % gradients.length;
   const bgGradient = gradients[gradientIndex];
-  const canSwipeLeft = !isFirst;
-  const canSwipeRight = !isLast;
+  const canSwipeLeft = !isLast;
+  const canSwipeRight = !isFirst;
 
   const dragConstraints =
     isFirst && !isLast
-      ? { left: 0, right: 280 }
+      ? { left: -280, right: 0 }
       : isLast && !isFirst
-        ? { left: -280, right: 0 }
+        ? { left: 0, right: 280 }
         : undefined;
 
   const triggerHaloPulse = () => {
@@ -79,32 +77,46 @@ export function FlashCard({ card, onSpeak, onSwipeLeft, onSwipeRight, isFirst = 
   return (
     <motion.div
       className="flashcard-shell relative w-full max-w-md mx-auto aspect-[3/4] cursor-pointer select-none"
-      style={{ x, rotate, scale }}
+      style={{ x, rotate, scale, touchAction: 'pan-y' }}
       onClick={() => {
+        if (hasDraggedRef.current) {
+          hasDraggedRef.current = false;
+          return;
+        }
         triggerHaptic(10);
         triggerHaloPulse();
         onSpeak();
       }}
       whileTap={{ scale: 0.97 }}
-      whileDrag={{ scale: 1.01 }}
+      whileDrag={{ scale: 1.015 }}
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.55 }}
       drag={isFirst && isLast ? false : 'x'}
       dragConstraints={dragConstraints}
-      dragElastic={0.2}
-      dragMomentum={false}
-      dragTransition={{ bounceStiffness: 520, bounceDamping: 30 }}
+      dragElastic={0.24}
+      dragMomentum
+      dragTransition={{
+        power: 0.18,
+        timeConstant: 180,
+        bounceStiffness: 620,
+        bounceDamping: 34,
+        restDelta: 0.5,
+      }}
       onDragStart={() => {
         hapticStartedRef.current = true;
         thresholdCrossedRef.current = false;
+        hasDraggedRef.current = false;
         triggerHaptic(8);
       }}
       onDrag={(event, info) => {
-        const swipeThreshold = 90;
         const offsetX = info.offset.x;
-        const crossed = Math.abs(offsetX) > swipeThreshold;
+        if (Math.abs(offsetX) > 10) {
+          hasDraggedRef.current = true;
+        }
+
+        const crossed = Math.abs(offsetX) > SWIPE_OFFSET_THRESHOLD;
 
         if (crossed && !thresholdCrossedRef.current) {
           thresholdCrossedRef.current = true;
@@ -115,7 +127,7 @@ export function FlashCard({ card, onSpeak, onSwipeLeft, onSwipeRight, isFirst = 
           thresholdCrossedRef.current = false;
         }
 
-        if ((isFirst && offsetX < -swipeThreshold) || (isLast && offsetX > swipeThreshold)) {
+        if ((isFirst && offsetX > SWIPE_OFFSET_THRESHOLD) || (isLast && offsetX < -SWIPE_OFFSET_THRESHOLD)) {
           if (hapticStartedRef.current) {
             hapticStartedRef.current = false;
             triggerHaptic(10);
@@ -123,14 +135,18 @@ export function FlashCard({ card, onSpeak, onSwipeLeft, onSwipeRight, isFirst = 
         }
       }}
       onDragEnd={(event, info) => {
-        const swipeThreshold = 90;
+        const offsetX = info.offset.x;
+        const velocityX = info.velocity.x;
+        const swipedRight = offsetX > SWIPE_OFFSET_THRESHOLD || velocityX > SWIPE_VELOCITY_THRESHOLD;
+        const swipedLeft = offsetX < -SWIPE_OFFSET_THRESHOLD || velocityX < -SWIPE_VELOCITY_THRESHOLD;
+
         hapticStartedRef.current = false;
         thresholdCrossedRef.current = false;
 
-        if (info.offset.x > swipeThreshold && canSwipeRight) {
+        if (swipedRight && canSwipeRight) {
           triggerHaptic([30, 10, 20]); // Success feedback pattern
           onSwipeRight?.();
-        } else if (info.offset.x < -swipeThreshold && canSwipeLeft) {
+        } else if (swipedLeft && canSwipeLeft) {
           triggerHaptic([30, 10, 20]); // Success feedback pattern
           onSwipeLeft?.();
         } else {

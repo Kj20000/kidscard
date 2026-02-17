@@ -228,23 +228,25 @@ const Index = () => {
             exit={{ opacity: 0 }}
             className="h-[100dvh] p-3 pb-4 flex flex-col overflow-hidden"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h1 className="text-3xl md:text-4xl font-extrabold text-foreground">
-                  🎴 Flash Cards
-                </h1>
-                <p className="text-muted-foreground font-semibold mt-1">
-                  {isReorderMode
-                    ? 'Drag icons to move them. Tap Done when finished.'
-                    : 'Tap a category to start learning! Long press 3 seconds to move icons.'}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
+            {/* App Bar */}
+            <header className="mb-4 rounded-3xl bg-card/95 backdrop-blur-sm card-shadow px-3 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground leading-tight truncate">
+                    🎴 Flash Cards
+                  </h1>
+                  <p className="text-muted-foreground font-semibold mt-0.5 text-sm sm:text-base truncate">
+                    {isReorderMode
+                      ? 'Drag icons to move them. Tap Done when finished.'
+                      : 'Tap a category to start learning.'}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
                 {isReorderMode && (
                   <Button
                     variant="outline"
-                    className="h-12 rounded-2xl font-bold"
+                    className="h-11 rounded-2xl font-bold"
                     onClick={() => setIsReorderMode(false)}
                   >
                     Done
@@ -258,12 +260,12 @@ const Index = () => {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <motion.button
-                      className="w-14 h-14 bg-card rounded-2xl card-shadow flex items-center justify-center"
+                      className="w-12 h-12 bg-card rounded-2xl card-shadow flex items-center justify-center"
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       title="Select theme"
                     >
-                      <Palette className="w-7 h-7 text-primary" />
+                      <Palette className="w-6 h-6 text-primary" />
                     </motion.button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48 rounded-2xl p-2">
@@ -283,14 +285,15 @@ const Index = () => {
                 </DropdownMenu>
                 <motion.button
                   onClick={handleSettingsClick}
-                  className="w-14 h-14 bg-card rounded-2xl card-shadow flex items-center justify-center"
+                  className="w-12 h-12 bg-card rounded-2xl card-shadow flex items-center justify-center"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  <Settings className="w-7 h-7 text-muted-foreground" />
+                  <Settings className="w-6 h-6 text-muted-foreground" />
                 </motion.button>
               </div>
-            </div>
+              </div>
+            </header>
 
             {/* Category Grid */}
             <DndContext sensors={sensors} onDragEnd={handleCategoryDragEnd}>

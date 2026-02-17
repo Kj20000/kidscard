@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Plus, Check, X, Upload } from 'lucide-react';
 import { FlashCard } from '@/components/FlashCard';
 import { useSpeech } from '@/hooks/useSpeech';
+import { useHaptics } from '@/hooks/useHaptics';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -31,13 +32,7 @@ export function CardViewer({ category, cards, settings, onBack, onAddCard, allCa
   const [newCardWord, setNewCardWord] = useState('');
   const [newCardImage, setNewCardImage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Haptic feedback helper
-  const triggerHaptic = (pattern: number | number[] = 10) => {
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate(pattern);
-    }
-  };
+  const { triggerHaptic } = useHaptics();
 
   const currentCard = cards[currentIndex];
 
