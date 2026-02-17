@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Plus, Check, X, Upload } from 'lucide-react';
 import { FlashCard } from '@/components/FlashCard';
 import { useSpeech } from '@/hooks/useSpeech';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { toast } from 'sonner';
 import type { Flashcard, Category, AppSettings } from '@/types/flashcard';
 import {
   DropdownMenu,
@@ -16,13 +19,18 @@ interface CardViewerProps {
   cards: Flashcard[];
   settings: AppSettings;
   onBack: () => void;
+  onAddCard?: (card: Omit<Flashcard, 'id'>) => void;
   allCategories?: Category[];
   onCategoryChange?: (category: Category) => void;
 }
 
-export function CardViewer({ category, cards, settings, onBack, allCategories = [], onCategoryChange }: CardViewerProps) {
+export function CardViewer({ category, cards, settings, onBack, onAddCard, allCategories = [], onCategoryChange }: CardViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const { speak } = useSpeech({ speed: settings.voiceSpeed });
+  const [isAddingCard, setIsAddingCard] = useState(false);
+  const [newCardWord, setNewCardWord] = useState('');
+  const [newCardImage, setNewCardImage] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentCard = cards[currentIndex];
 
@@ -31,6 +39,31 @@ export function CardViewer({ category, cards, settings, onBack, allCategories = 
       speak(currentCard.word);
     }
   }, [currentCard, speak]);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewCardImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAddCard = () => {
+    if (newCardWord.trim() && newCardImage.trim() && onAddCard) {
+      onAddCard({
+        word: newCardWord.trim(),
+        imageUrl: newCardImage.trim(),
+        categoryId: category.id,
+      });
+      setNewCardWord('');
+      setNewCardImage('');
+      setIsAddingCard(false);
+      toast.success('Card added successfully!');
+    }
+  };
 
   // Auto-play on card change
   useEffect(() => {
@@ -54,21 +87,114 @@ export function CardViewer({ category, cards, settings, onBack, allCategories = 
     }
   };
 
-  if (cards.length === 0) {
+  if (cards.length === 0 && !isAddingCard) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
         <div className="text-center">
           <span className="text-6xl mb-4 block">{category.icon}</span>
           <h2 className="text-2xl font-bold mb-2">No Cards Yet!</h2>
-          <p className="text-muted-foreground mb-6">Add some cards in the settings.</p>
+          <p className="text-muted-foreground mb-8">Add some cards to get started.</p>
+          <div className="flex flex-col gap-4">
+            {onAddCard && (
+              <motion.button
+                onClick={() => setIsAddingCard(true)}
+                className="bg-primary text-primary-foreground px-8 py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-2"
+                whileTap={{ scale: 0.95 }}
+              >
+                <Plus className="w-6 h-6" />
+                Add Card Here
+              </motion.button>
+            )}
+            <motion.button
+              onClick={onBack}
+              className="bg-card text-foreground px-8 py-4 rounded-2xl font-bold text-lg"
+              whileTap={{ scale: 0.95 }}
+            >
+              Go Back
+            </motion.button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isAddingCard) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col p-4">
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-6">
           <motion.button
-            onClick={onBack}
-            className="bg-primary text-primary-foreground px-8 py-4 rounded-2xl font-bold text-lg"
+            onClick={() => setIsAddingCard(false)}
+            className="w-14 h-14 bg-card rounded-2xl card-shadow flex items-center justify-center"
             whileTap={{ scale: 0.95 }}
           >
-            Go Back
+            <ArrowLeft className="w-7 h-7" />
           </motion.button>
+          <h2 className="text-2xl font-bold flex-1">Add New Card</h2>
         </div>
+
+        {/* Add Card Form */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex-1 space-y-4 flex flex-col"
+        >
+          <Input
+            placeholder="Word (e.g., Cat)"
+            value={newCardWord}
+            onChange={(e) => setNewCardWord(e.target.value)}
+            className="h-12 rounded-xl text-lg"
+          />
+
+          <div className="flex gap-2">
+            <Input
+              placeholder="Image URL"
+              value={newCardImage}
+              onChange={(e) => setNewCardImage(e.target.value)}
+              className="h-12 rounded-xl flex-1"
+            />
+            <input
+              type="file"
+              accept="image/*"
+              ref={fileInputRef}
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+            <Button
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              className="h-12 px-4 rounded-xl"
+            >
+              <Upload className="w-5 h-5" />
+            </Button>
+          </div>
+
+          {newCardImage && (
+            <div className="relative w-32 h-32 rounded-xl overflow-hidden bg-gradient-to-br from-purple-400 via-pink-400 to-blue-400 mx-auto flex items-center justify-center">
+              <img src={newCardImage} alt="Preview" className="w-full h-full object-contain" />
+            </div>
+          )}
+
+          <div className="flex-1" />
+
+          <div className="flex gap-2">
+            <Button
+              onClick={handleAddCard}
+              className="flex-1 h-12 bg-secondary text-secondary-foreground rounded-xl font-semibold"
+              disabled={!newCardWord.trim() || !newCardImage.trim()}
+            >
+              <Check className="w-5 h-5 mr-2" />
+              Save Card
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsAddingCard(false)}
+              className="h-12 px-6 rounded-xl"
+            >
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
+        </motion.div>
       </div>
     );
   }
@@ -124,7 +250,16 @@ export function CardViewer({ category, cards, settings, onBack, allCategories = 
           </div>
         )}
 
-        <div className="w-14 h-14" /> {/* Spacer for centering */}
+        {onAddCard && (
+          <motion.button
+            onClick={() => setIsAddingCard(true)}
+            className="w-14 h-14 bg-card rounded-2xl card-shadow flex items-center justify-center hover:bg-muted/50 transition-colors"
+            whileTap={{ scale: 0.95 }}
+            title="Add new card"
+          >
+            <Plus className="w-7 h-7 text-primary" />
+          </motion.button>
+        )}
       </div>
 
       {/* Progress dots */}

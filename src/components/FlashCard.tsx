@@ -8,6 +8,20 @@ interface FlashCardProps {
 }
 
 export function FlashCard({ card, onSpeak }: FlashCardProps) {
+  // Generate a gradient background based on card properties
+  const gradients = [
+    'from-purple-400 via-pink-400 to-blue-400',
+    'from-pink-300 via-yellow-300 to-orange-300',
+    'from-blue-400 via-cyan-400 to-teal-400',
+    'from-green-400 via-emerald-400 to-teal-400',
+    'from-orange-400 via-red-400 to-pink-400',
+    'from-indigo-400 via-purple-400 to-pink-400',
+  ];
+  
+  // Use card id to pick a consistent gradient
+  const gradientIndex = card.id.charCodeAt(0) % gradients.length;
+  const bgGradient = gradients[gradientIndex];
+
   return (
     <motion.div
       className="relative w-full max-w-md mx-auto aspect-[3/4] cursor-pointer"
@@ -20,11 +34,11 @@ export function FlashCard({ card, onSpeak }: FlashCardProps) {
     >
       <div className="relative h-full w-full bg-card rounded-3xl card-shadow overflow-hidden flex flex-col">
         {/* Image Section */}
-        <div className="flex-1 relative overflow-hidden">
+        <div className={`flex-1 relative overflow-hidden bg-gradient-to-br ${bgGradient} flex items-center justify-center`}>
           <img
             src={card.imageUrl}
             alt={card.word}
-            className="absolute inset-0 w-full h-full object-cover"
+            className="w-full h-full object-contain"
             loading="eager"
           />
           

@@ -151,6 +151,7 @@ const Index = () => {
               cards={getCardsByCategory(selectedCategory.id)}
               settings={settings}
               onBack={handleBack}
+              onAddCard={addCard}
               allCategories={categories}
               onCategoryChange={handleCategoryChange}
             />
