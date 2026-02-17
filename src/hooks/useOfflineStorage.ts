@@ -15,12 +15,12 @@
  };
  
  const DEFAULT_CATEGORIES: Category[] = [
-   { id: 'animals', name: 'Animals', icon: '🐾', color: 'coral', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'colors', name: 'Colors', icon: '🎨', color: 'sky', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'numbers', name: 'Numbers', icon: '🔢', color: 'mint', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'food', name: 'Food', icon: '🍎', color: 'sunshine', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'shapes', name: 'Shapes', icon: '⭐', color: 'lavender', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'nature', name: 'Nature', icon: '🌸', color: 'peach', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
+  { id: 'animals', name: 'Animals', icon: '🐾', color: 'coral', order: 0, createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
+  { id: 'colors', name: 'Colors', icon: '🎨', color: 'sky', order: 1, createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
+  { id: 'numbers', name: 'Numbers', icon: '🔢', color: 'mint', order: 2, createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
+  { id: 'food', name: 'Food', icon: '🍎', color: 'sunshine', order: 3, createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
+  { id: 'shapes', name: 'Shapes', icon: '⭐', color: 'lavender', order: 4, createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
+  { id: 'nature', name: 'Nature', icon: '🌸', color: 'peach', order: 5, createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
  ];
  
  const DEFAULT_CARDS: Flashcard[] = [
@@ -55,6 +55,7 @@
  const DEFAULT_SETTINGS: AppSettings = {
    autoPlayAudio: true,
    voiceSpeed: 'normal',
+  theme: 'sunshine',
    enableCloudSync: false,
  };
  
@@ -154,7 +155,7 @@
          await set(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS, settingsStore);
          return DEFAULT_SETTINGS;
        }
-       return settings;
+      return { ...DEFAULT_SETTINGS, ...settings };
      } catch (error) {
        console.error('Failed to get settings from IndexedDB:', error);
        return DEFAULT_SETTINGS;

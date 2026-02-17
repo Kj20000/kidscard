@@ -14,6 +14,7 @@ export interface Category {
   name: string;
   icon: string;
   color: 'coral' | 'mint' | 'sky' | 'lavender' | 'sunshine' | 'peach';
+  order?: number;
   createdAt?: number;
   updatedAt?: number;
   syncStatus?: 'synced' | 'pending' | 'conflict';
@@ -22,6 +23,7 @@ export interface Category {
 export interface AppSettings {
   autoPlayAudio: boolean;
   voiceSpeed: 'slow' | 'normal';
+  theme: 'sunshine' | 'ocean' | 'berry';
   enableCloudSync?: boolean;
 }
 

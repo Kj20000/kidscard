@@ -201,9 +201,9 @@ export function SettingsPage({
     cards.filter((c) => c.categoryId === categoryId).length;
 
   return (
-    <div className="min-h-screen bg-background p-4 pb-24">
+    <div className="h-[100dvh] bg-background p-4 pb-4 overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex items-center gap-4 mb-3 shrink-0">
         <motion.button
           onClick={onBack}
           className="w-12 h-12 bg-card rounded-2xl card-shadow flex items-center justify-center"
@@ -215,12 +215,12 @@ export function SettingsPage({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 bg-muted p-1 rounded-2xl overflow-x-auto">
+      <div className="grid grid-cols-4 gap-1 mb-3 bg-muted p-1 rounded-2xl shrink-0">
         {(['cards', 'categories', 'settings', 'account'] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-3 px-4 rounded-xl font-semibold text-sm transition-all whitespace-nowrap ${
+            className={`py-2 px-2 rounded-xl font-semibold text-xs sm:text-sm transition-all whitespace-nowrap ${
               activeTab === tab
                 ? 'bg-card card-shadow text-foreground'
                 : 'text-muted-foreground'
@@ -231,12 +231,14 @@ export function SettingsPage({
         ))}
       </div>
 
+      <div className="flex-1 min-h-0 overflow-hidden">
+
       {/* Cards Tab */}
       {activeTab === 'cards' && (
-        <div className="space-y-4">
+        <div className="h-full flex flex-col gap-3 min-h-0">
           <Button
             onClick={() => setIsAddingCard(true)}
-            className="w-full h-14 bg-primary text-primary-foreground rounded-2xl font-semibold text-lg"
+            className="w-full h-12 bg-primary text-primary-foreground rounded-2xl font-semibold text-base"
           >
             <Plus className="w-5 h-5 mr-2" />
             Add New Card
@@ -246,7 +248,7 @@ export function SettingsPage({
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-card rounded-2xl p-4 card-shadow space-y-4"
+              className="bg-card rounded-2xl p-3 card-shadow space-y-3 shrink-0"
             >
               <Input
                 placeholder="Word (e.g., Cat)"
@@ -316,7 +318,7 @@ export function SettingsPage({
           )}
 
           {/* Card List */}
-          <div className="space-y-2">
+          <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 gap-2 content-start overflow-hidden">
             {cards.map((card) => {
               const category = categories.find((c) => c.id === card.categoryId);
               const isEditing = editingCardId === card.id;
@@ -429,10 +431,10 @@ export function SettingsPage({
 
       {/* Categories Tab */}
       {activeTab === 'categories' && (
-        <div className="space-y-4">
+        <div className="h-full flex flex-col gap-3 min-h-0">
           <Button
             onClick={() => setIsAddingCategory(true)}
-            className="w-full h-14 bg-primary text-primary-foreground rounded-2xl font-semibold text-lg"
+            className="w-full h-12 bg-primary text-primary-foreground rounded-2xl font-semibold text-base"
           >
             <Plus className="w-5 h-5 mr-2" />
             Add New Category
@@ -442,7 +444,7 @@ export function SettingsPage({
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-card rounded-2xl p-4 card-shadow space-y-4"
+              className="bg-card rounded-2xl p-3 card-shadow space-y-3 shrink-0"
             >
               <Input
                 placeholder="Category Name"
@@ -507,7 +509,7 @@ export function SettingsPage({
           )}
 
           {/* Category List */}
-          <div className="space-y-2">
+          <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 gap-2 content-start overflow-hidden">
             {categories.map((category) => {
               const isEditing = editingCategoryId === category.id;
 
@@ -616,7 +618,7 @@ export function SettingsPage({
 
       {/* Settings Tab */}
       {activeTab === 'settings' && (
-        <div className="space-y-4">
+        <div className="h-full flex flex-col gap-3 min-h-0">
           <Card className="p-4 rounded-2xl">
             <div className="flex items-center justify-between">
               <div>
@@ -669,7 +671,7 @@ export function SettingsPage({
 
       {/* Account Tab */}
       {activeTab === 'account' && (
-        <div className="space-y-4">
+        <div className="h-full flex flex-col gap-3 min-h-0">
           {user ? (
             <>
               <Card className="p-6 rounded-2xl">
@@ -717,6 +719,7 @@ export function SettingsPage({
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

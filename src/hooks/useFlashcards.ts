@@ -3,6 +3,16 @@ import type { Flashcard, Category, AppSettings } from '@/types/flashcard';
 import { useOfflineStorage } from './useOfflineStorage';
 import { useFlashcardSync, ENABLE_CLOUD_SYNC } from './useFlashcardSync';
 
+const sortCategories = (items: Category[]) =>
+  [...items].sort((a, b) => {
+    const aOrder = a.order ?? Number.MAX_SAFE_INTEGER;
+    const bOrder = b.order ?? Number.MAX_SAFE_INTEGER;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    const aCreated = a.createdAt ?? 0;
+    const bCreated = b.createdAt ?? 0;
+    return aCreated - bCreated;
+  });
+
 
 export function useFlashcards() {
   const storage = useOfflineStorage();
@@ -13,6 +23,7 @@ export function useFlashcards() {
   const [settings, setSettings] = useState<AppSettings>({
     autoPlayAudio: true,
     voiceSpeed: 'normal',
+    theme: 'sunshine',
     enableCloudSync: false,
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -32,7 +43,7 @@ export function useFlashcards() {
           storage.getSettings(),
         ]);
         
-        setCategories(loadedCategories);
+        setCategories(sortCategories(loadedCategories));
         setCards(loadedCards);
         setSettings(loadedSettings);
       } catch (error) {
@@ -108,9 +119,11 @@ export function useFlashcards() {
 
   const addCategory = useCallback(async (category: Omit<Category, 'id'>) => {
     const now = Date.now();
+    const maxOrder = categories.reduce((max, cat) => Math.max(max, cat.order ?? -1), -1);
     const newCategory: Category = {
       ...category,
       id: `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      order: maxOrder + 1,
       createdAt: now,
       updatedAt: now,
       syncStatus: 'pending',
@@ -130,11 +143,11 @@ export function useFlashcards() {
   }, [categories, storage, sync]);
 
   const updateCategory = useCallback(async (id: string, updates: Partial<Omit<Category, 'id'>>) => {
-    const updatedCategories = categories.map((cat) =>
+    const updatedCategories = sortCategories(categories.map((cat) =>
       cat.id === id
         ? { ...cat, ...updates, updatedAt: Date.now(), syncStatus: 'pending' as const }
         : cat
-    );
+    ));
     setCategories(updatedCategories);
     
     storage.saveAllCategories(updatedCategories).then(() => {
@@ -146,7 +159,7 @@ export function useFlashcards() {
   }, [categories, storage, sync]);
 
   const deleteCategory = useCallback(async (id: string) => {
-    const updatedCategories = categories.filter((cat) => cat.id !== id);
+    const updatedCategories = sortCategories(categories.filter((cat) => cat.id !== id));
     setCategories(updatedCategories);
     
     // Also delete all cards in this category
@@ -160,6 +173,31 @@ export function useFlashcards() {
       sync.updatePendingCount();
     });
   }, [categories, cards, storage, sync]);
+
+  const reorderCategories = useCallback(async (categoryIds: string[]) => {
+    const now = Date.now();
+    const orderMap = new Map(categoryIds.map((id, index) => [id, index]));
+    const updatedCategories = sortCategories(
+      categories.map((cat) => {
+        const nextOrder = orderMap.get(cat.id);
+        if (nextOrder === undefined) return cat;
+        return {
+          ...cat,
+          order: nextOrder,
+          updatedAt: now,
+          syncStatus: 'pending' as const,
+        };
+      })
+    );
+
+    setCategories(updatedCategories);
+    storage.saveAllCategories(updatedCategories).then(() => {
+      sync.updatePendingCount();
+      if (ENABLE_CLOUD_SYNC && sync.syncState.isOnline) {
+        sync.syncToCloud();
+      }
+    });
+  }, [categories, storage, sync]);
 
   const updateSettings = useCallback(async (updates: Partial<AppSettings>) => {
     const newSettings = { ...settings, ...updates };
@@ -204,6 +242,7 @@ export function useFlashcards() {
     deleteCard,
     addCategory,
     updateCategory,
+    reorderCategories,
     deleteCategory,
     updateSettings,
     resetToDefaults,

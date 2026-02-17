@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { Volume2 } from 'lucide-react';
 import type { Flashcard } from '@/types/flashcard';
 
@@ -12,6 +14,16 @@ interface FlashCardProps {
 }
 
 export function FlashCard({ card, onSpeak, onSwipeLeft, onSwipeRight, isFirst = false, isLast = false }: FlashCardProps) {
+  const x = useMotionValue(0);
+  const rotate = useTransform(x, [-220, 0, 220], [-10, 0, 10]);
+  const rawScale = useTransform(x, [-220, 0, 220], [0.96, 1, 0.96]);
+  const scale = useSpring(rawScale, { stiffness: 350, damping: 28, mass: 0.45 });
+  const hapticStartedRef = useRef(false);
+  const thresholdCrossedRef = useRef(false);
+  const haloTimerRef = useRef<number | null>(null);
+  const [isHaloVisible, setIsHaloVisible] = useState(false);
+  const [haloPulseKey, setHaloPulseKey] = useState(0);
+
   // Haptic feedback helper
   const triggerHaptic = (pattern: number | number[] = 10) => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -32,46 +44,131 @@ export function FlashCard({ card, onSpeak, onSwipeLeft, onSwipeRight, isFirst = 
   // Use card id to pick a consistent gradient
   const gradientIndex = card.id.charCodeAt(0) % gradients.length;
   const bgGradient = gradients[gradientIndex];
+  const canSwipeLeft = !isFirst;
+  const canSwipeRight = !isLast;
+
+  const dragConstraints =
+    isFirst && !isLast
+      ? { left: 0, right: 280 }
+      : isLast && !isFirst
+        ? { left: -280, right: 0 }
+        : undefined;
+
+  const triggerHaloPulse = () => {
+    if (haloTimerRef.current !== null) {
+      window.clearTimeout(haloTimerRef.current);
+      haloTimerRef.current = null;
+    }
+
+    setHaloPulseKey((prev) => prev + 1);
+    setIsHaloVisible(true);
+    haloTimerRef.current = window.setTimeout(() => {
+      setIsHaloVisible(false);
+      haloTimerRef.current = null;
+    }, 900);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (haloTimerRef.current !== null) {
+        window.clearTimeout(haloTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <motion.div
-      className="relative w-full max-w-md mx-auto aspect-[3/4] cursor-pointer"
+      className="flashcard-shell relative w-full max-w-md mx-auto aspect-[3/4] cursor-pointer select-none"
+      style={{ x, rotate, scale }}
       onClick={() => {
         triggerHaptic(10);
+        triggerHaloPulse();
         onSpeak();
       }}
       whileTap={{ scale: 0.97 }}
+      whileDrag={{ scale: 1.01 }}
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+      transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.55 }}
       drag={isFirst && isLast ? false : 'x'}
-      dragElastic={0.15}
-      dragTransition={{ power: 0.3, restDelta: 10 }}
+      dragConstraints={dragConstraints}
+      dragElastic={0.2}
+      dragMomentum={false}
+      dragTransition={{ bounceStiffness: 520, bounceDamping: 30 }}
+      onDragStart={() => {
+        hapticStartedRef.current = true;
+        thresholdCrossedRef.current = false;
+        triggerHaptic(8);
+      }}
       onDrag={(event, info) => {
-        const swipeThreshold = 75;
-        // Light feedback as user drags
-        if (Math.abs(info.offset.x) > swipeThreshold) {
-          // Only trigger once per threshold crossing
-          if (Math.abs(info.offset.x) <= swipeThreshold + 10) {
-            triggerHaptic(15);
+        const swipeThreshold = 90;
+        const offsetX = info.offset.x;
+        const crossed = Math.abs(offsetX) > swipeThreshold;
+
+        if (crossed && !thresholdCrossedRef.current) {
+          thresholdCrossedRef.current = true;
+          triggerHaptic(14);
+        }
+
+        if (!crossed && thresholdCrossedRef.current) {
+          thresholdCrossedRef.current = false;
+        }
+
+        if ((isFirst && offsetX < -swipeThreshold) || (isLast && offsetX > swipeThreshold)) {
+          if (hapticStartedRef.current) {
+            hapticStartedRef.current = false;
+            triggerHaptic(10);
           }
         }
       }}
       onDragEnd={(event, info) => {
-        const swipeThreshold = 75;
-        if (info.offset.x > swipeThreshold && !isFirst) {
+        const swipeThreshold = 90;
+        hapticStartedRef.current = false;
+        thresholdCrossedRef.current = false;
+
+        if (info.offset.x > swipeThreshold && canSwipeRight) {
           triggerHaptic([30, 10, 20]); // Success feedback pattern
           onSwipeRight?.();
-        } else if (info.offset.x < -swipeThreshold && !isLast) {
+        } else if (info.offset.x < -swipeThreshold && canSwipeLeft) {
           triggerHaptic([30, 10, 20]); // Success feedback pattern
           onSwipeLeft?.();
+        } else {
+          triggerHaptic(6);
         }
       }}
     >
-      <div className="relative h-full w-full bg-card rounded-3xl card-shadow overflow-hidden flex flex-col">
+      {isHaloVisible && (
+        <motion.div
+          key={haloPulseKey}
+          className="pointer-events-none absolute -inset-3 rounded-[2rem] border-4"
+          style={{
+            borderColor: 'hsl(var(--primary) / 0.75)',
+            boxShadow: '0 0 0.9rem hsl(var(--primary) / 0.45), 0 0 2.2rem hsl(var(--primary) / 0.28)',
+          }}
+          initial={{ opacity: 0.95, scale: 0.92 }}
+          animate={{ opacity: 0, scale: 1.08 }}
+          transition={{ duration: 0.85, ease: 'easeOut' }}
+        />
+      )}
+
+      {isHaloVisible && (
+        <motion.div
+          key={`inner-${haloPulseKey}`}
+          className="pointer-events-none absolute -inset-1 rounded-[2rem] border-2"
+          style={{
+            borderColor: 'hsl(var(--accent) / 0.65)',
+            boxShadow: '0 0 0.6rem hsl(var(--accent) / 0.38)',
+          }}
+          initial={{ opacity: 0.75, scale: 0.98 }}
+          animate={{ opacity: 0, scale: 1.03 }}
+          transition={{ duration: 0.75, ease: 'easeOut' }}
+        />
+      )}
+
+      <div className="flashcard-content relative h-full w-full bg-card rounded-3xl card-shadow overflow-hidden flex flex-col">
         {/* Image Section */}
-        <div className={`flex-1 relative overflow-hidden bg-gradient-to-br ${bgGradient} flex items-center justify-center`}>
+        <div className={`flashcard-image flex-1 relative overflow-hidden bg-gradient-to-br ${bgGradient} flex items-center justify-center`}>
           <img
             src={card.imageUrl}
             alt={card.word}
@@ -90,8 +187,8 @@ export function FlashCard({ card, onSpeak, onSwipeLeft, onSwipeRight, isFirst = 
         </div>
 
         {/* Word Section */}
-        <div className="py-8 px-6 bg-gradient-to-t from-primary/20 to-transparent">
-          <h2 className="text-4xl md:text-5xl font-extrabold text-center text-foreground">
+        <div className="flashcard-word py-8 px-6 bg-gradient-to-t from-primary/20 to-transparent">
+          <h2 className="text-4xl md:text-5xl font-extrabold text-center text-foreground break-words">
             {card.word}
           </h2>
         </div>

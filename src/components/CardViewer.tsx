@@ -99,7 +99,7 @@ export function CardViewer({ category, cards, settings, onBack, onAddCard, allCa
 
   if (cards.length === 0 && !isAddingCard) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+      <div className="h-[100dvh] bg-background flex flex-col items-center justify-center p-6 overflow-hidden">
         <div className="text-center">
           <span className="text-6xl mb-4 block">{category.icon}</span>
           <h2 className="text-2xl font-bold mb-2">No Cards Yet!</h2>
@@ -130,7 +130,7 @@ export function CardViewer({ category, cards, settings, onBack, onAddCard, allCa
 
   if (isAddingCard) {
     return (
-      <div className="min-h-screen bg-background flex flex-col p-4">
+      <div className="h-[100dvh] bg-background flex flex-col p-4 overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <motion.button
@@ -147,7 +147,7 @@ export function CardViewer({ category, cards, settings, onBack, onAddCard, allCa
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex-1 space-y-4 flex flex-col"
+          className="flex-1 space-y-4 flex flex-col min-h-0"
         >
           <Input
             placeholder="Word (e.g., Cat)"
@@ -210,7 +210,7 @@ export function CardViewer({ category, cards, settings, onBack, onAddCard, allCa
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col p-4">
+    <div className="h-[100dvh] bg-background flex flex-col p-4 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <motion.button
@@ -286,7 +286,7 @@ export function CardViewer({ category, cards, settings, onBack, onAddCard, allCa
       </div>
 
       {/* Card */}
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex-1 min-h-0 flex items-center justify-center">
         <AnimatePresence mode="wait">
           <FlashCard 
             key={currentCard.id} 
@@ -301,7 +301,7 @@ export function CardViewer({ category, cards, settings, onBack, onAddCard, allCa
       </div>
 
       {/* Navigation */}
-      <div className="flex justify-center gap-4 mt-6 pb-4">
+      <div className="flex justify-center gap-4 mt-3 pb-2">
         <motion.button
           onClick={goPrev}
           disabled={currentIndex === 0}

@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Loader2 } from 'lucide-react';
+import { Settings, Loader2, Palette } from 'lucide-react';
 import { CategoryCard } from '@/components/CategoryCard';
 import { CardViewer } from '@/components/CardViewer';
 import { SettingsPage } from '@/components/SettingsPage';
@@ -8,8 +8,83 @@ import { ParentGate } from '@/components/ParentGate';
 import { SyncButton } from '@/components/SyncButton';
 import { useFlashcards } from '@/hooks/useFlashcards';
 import type { Category } from '@/types/flashcard';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 type View = 'home' | 'viewer' | 'settings';
+
+const THEME_OPTIONS = [
+  { id: 'sunshine' as const, name: 'Sunshine', icon: '🌞' },
+  { id: 'ocean' as const, name: 'Ocean Pop', icon: '🌊' },
+  { id: 'berry' as const, name: 'Berry Blast', icon: '🫐' },
+];
+
+interface SortableCategoryItemProps {
+  category: Category;
+  cardCount: number;
+  index: number;
+  isReorderMode: boolean;
+  onSelect: () => void;
+  onPressStart: () => void;
+  onPressEnd: () => void;
+}
+
+function SortableCategoryItem({
+  category,
+  cardCount,
+  index,
+  isReorderMode,
+  onSelect,
+  onPressStart,
+  onPressEnd,
+}: SortableCategoryItemProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: category.id,
+    disabled: !isReorderMode,
+  });
+
+  return (
+    <motion.div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.06 }}
+      className={`${isReorderMode ? 'icon-jiggle' : ''} ${isDragging ? 'z-20 scale-105' : ''}`}
+      onPointerDown={onPressStart}
+      onPointerUp={onPressEnd}
+      onPointerCancel={onPressEnd}
+      onPointerLeave={onPressEnd}
+      {...(isReorderMode ? { ...attributes, ...listeners } : {})}
+    >
+      <CategoryCard
+        category={category}
+        cardCount={cardCount}
+        onClick={() => {
+          if (!isReorderMode) {
+            onSelect();
+          }
+        }}
+      />
+    </motion.div>
+  );
+}
 
 const Index = () => {
   const {
@@ -23,6 +98,7 @@ const Index = () => {
     deleteCard,
     addCategory,
     updateCategory,
+    reorderCategories,
     deleteCategory,
     updateSettings,
     syncState,
@@ -33,6 +109,26 @@ const Index = () => {
   const [view, setView] = useState<View>('home');
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [showParentGate, setShowParentGate] = useState(false);
+  const [isReorderMode, setIsReorderMode] = useState(false);
+  const longPressTimerRef = useRef<number | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 4,
+      },
+    })
+  );
+
+  const sortedCategories = useMemo(
+    () =>
+      [...categories].sort((a, b) => {
+        const aOrder = a.order ?? Number.MAX_SAFE_INTEGER;
+        const bOrder = b.order ?? Number.MAX_SAFE_INTEGER;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return (a.createdAt ?? 0) - (b.createdAt ?? 0);
+      }),
+    [categories]
+  );
 
   const handleCategorySelect = (category: Category) => {
     setSelectedCategory(category);
@@ -55,11 +151,51 @@ const Index = () => {
   const handleBack = () => {
     setView('home');
     setSelectedCategory(null);
+    setIsReorderMode(false);
   };
+
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const startLongPress = () => {
+    if (isReorderMode) return;
+    clearLongPressTimer();
+    longPressTimerRef.current = window.setTimeout(() => {
+      setIsReorderMode(true);
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([18, 10, 18]);
+      }
+    }, 3000);
+  };
+
+  const endLongPress = () => {
+    clearLongPressTimer();
+  };
+
+  const handleCategoryDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = sortedCategories.findIndex((category) => category.id === active.id);
+    const newIndex = sortedCategories.findIndex((category) => category.id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(sortedCategories, oldIndex, newIndex);
+    reorderCategories(reordered.map((item) => item.id));
+  };
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', settings.theme);
+  }, [settings.theme]);
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="h-[100dvh] bg-background flex items-center justify-center overflow-hidden">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -73,7 +209,7 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background font-nunito">
+    <div className="h-[100dvh] bg-background font-nunito overflow-hidden">
       <AnimatePresence mode="wait">
         {showParentGate && (
           <ParentGate
@@ -90,7 +226,7 @@ const Index = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="min-h-screen p-3 pb-24"
+            className="h-[100dvh] p-3 pb-4 flex flex-col overflow-hidden"
           >
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
@@ -99,15 +235,52 @@ const Index = () => {
                   🎴 Flash Cards
                 </h1>
                 <p className="text-muted-foreground font-semibold mt-1">
-                  Tap a category to start learning!
+                  {isReorderMode
+                    ? 'Drag icons to move them. Tap Done when finished.'
+                    : 'Tap a category to start learning! Long press 3 seconds to move icons.'}
                 </p>
               </div>
               <div className="flex items-center gap-3">
+                {isReorderMode && (
+                  <Button
+                    variant="outline"
+                    className="h-12 rounded-2xl font-bold"
+                    onClick={() => setIsReorderMode(false)}
+                  >
+                    Done
+                  </Button>
+                )}
                 <SyncButton
                   syncState={syncState}
                   onSync={fullSync}
                   isEnabled={isCloudSyncEnabled}
                 />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <motion.button
+                      className="w-14 h-14 bg-card rounded-2xl card-shadow flex items-center justify-center"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      title="Select theme"
+                    >
+                      <Palette className="w-7 h-7 text-primary" />
+                    </motion.button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48 rounded-2xl p-2">
+                    {THEME_OPTIONS.map((theme) => (
+                      <DropdownMenuItem
+                        key={theme.id}
+                        onClick={() => updateSettings({ theme: theme.id })}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer ${
+                          settings.theme === theme.id ? 'bg-primary/20' : 'hover:bg-muted'
+                        }`}
+                      >
+                        <span className="text-lg">{theme.icon}</span>
+                        <span className="font-semibold">{theme.name}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <motion.button
                   onClick={handleSettingsClick}
                   className="w-14 h-14 bg-card rounded-2xl card-shadow flex items-center justify-center"
@@ -120,22 +293,27 @@ const Index = () => {
             </div>
 
             {/* Category Grid */}
-            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
-              {categories.map((category, index) => (
-                <motion.div
-                  key={category.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <CategoryCard
-                    category={category}
-                    cardCount={getCardsByCategory(category.id).length}
-                    onClick={() => handleCategorySelect(category)}
-                  />
-                </motion.div>
-              ))}
-            </div>
+            <DndContext sensors={sensors} onDragEnd={handleCategoryDragEnd}>
+              <SortableContext
+                items={sortedCategories.map((category) => category.id)}
+                strategy={rectSortingStrategy}
+              >
+                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2 flex-1 min-h-0 auto-rows-fr overflow-hidden">
+                  {sortedCategories.map((category, index) => (
+                    <SortableCategoryItem
+                      key={category.id}
+                      category={category}
+                      cardCount={getCardsByCategory(category.id).length}
+                      index={index}
+                      isReorderMode={isReorderMode}
+                      onSelect={() => handleCategorySelect(category)}
+                      onPressStart={startLongPress}
+                      onPressEnd={endLongPress}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           </motion.div>
         )}
 
@@ -152,7 +330,7 @@ const Index = () => {
               settings={settings}
               onBack={handleBack}
               onAddCard={addCard}
-              allCategories={categories}
+              allCategories={sortedCategories}
               onCategoryChange={handleCategoryChange}
             />
           </motion.div>
