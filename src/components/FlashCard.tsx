@@ -7,9 +7,18 @@ interface FlashCardProps {
   onSpeak: () => void;
   onSwipeLeft?: () => void;
   onSwipeRight?: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
 }
 
-export function FlashCard({ card, onSpeak, onSwipeLeft, onSwipeRight }: FlashCardProps) {
+export function FlashCard({ card, onSpeak, onSwipeLeft, onSwipeRight, isFirst = false, isLast = false }: FlashCardProps) {
+  // Haptic feedback helper
+  const triggerHaptic = (pattern: number | number[] = 10) => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(pattern);
+    }
+  };
+
   // Generate a gradient background based on card properties
   const gradients = [
     'from-purple-400 via-pink-400 to-blue-400',
@@ -27,19 +36,35 @@ export function FlashCard({ card, onSpeak, onSwipeLeft, onSwipeRight }: FlashCar
   return (
     <motion.div
       className="relative w-full max-w-md mx-auto aspect-[3/4] cursor-pointer"
-      onClick={onSpeak}
+      onClick={() => {
+        triggerHaptic(10);
+        onSpeak();
+      }}
       whileTap={{ scale: 0.97 }}
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-      drag="x"
-      dragElastic={0.2}
+      drag={isFirst && isLast ? false : 'x'}
+      dragElastic={0.15}
+      dragTransition={{ power: 0.3, restDelta: 10 }}
+      onDrag={(event, info) => {
+        const swipeThreshold = 75;
+        // Light feedback as user drags
+        if (Math.abs(info.offset.x) > swipeThreshold) {
+          // Only trigger once per threshold crossing
+          if (Math.abs(info.offset.x) <= swipeThreshold + 10) {
+            triggerHaptic(15);
+          }
+        }
+      }}
       onDragEnd={(event, info) => {
-        const swipeThreshold = 50;
-        if (info.offset.x > swipeThreshold) {
+        const swipeThreshold = 75;
+        if (info.offset.x > swipeThreshold && !isFirst) {
+          triggerHaptic([30, 10, 20]); // Success feedback pattern
           onSwipeRight?.();
-        } else if (info.offset.x < -swipeThreshold) {
+        } else if (info.offset.x < -swipeThreshold && !isLast) {
+          triggerHaptic([30, 10, 20]); // Success feedback pattern
           onSwipeLeft?.();
         }
       }}

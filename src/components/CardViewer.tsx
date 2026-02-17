@@ -32,6 +32,13 @@ export function CardViewer({ category, cards, settings, onBack, onAddCard, allCa
   const [newCardImage, setNewCardImage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Haptic feedback helper
+  const triggerHaptic = (pattern: number | number[] = 10) => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(pattern);
+    }
+  };
+
   const currentCard = cards[currentIndex];
 
   const speakWord = useCallback(() => {
@@ -53,6 +60,7 @@ export function CardViewer({ category, cards, settings, onBack, onAddCard, allCa
 
   const handleAddCard = () => {
     if (newCardWord.trim() && newCardImage.trim() && onAddCard) {
+      triggerHaptic([20, 10, 20]);
       onAddCard({
         word: newCardWord.trim(),
         imageUrl: newCardImage.trim(),
@@ -77,12 +85,14 @@ export function CardViewer({ category, cards, settings, onBack, onAddCard, allCa
 
   const goNext = () => {
     if (currentIndex < cards.length - 1) {
+      triggerHaptic(20);
       setCurrentIndex(currentIndex + 1);
     }
   };
 
   const goPrev = () => {
     if (currentIndex > 0) {
+      triggerHaptic(20);
       setCurrentIndex(currentIndex - 1);
     }
   };
@@ -284,6 +294,8 @@ export function CardViewer({ category, cards, settings, onBack, onAddCard, allCa
             onSpeak={speakWord}
             onSwipeLeft={goNext}
             onSwipeRight={goPrev}
+            isFirst={currentIndex === 0}
+            isLast={currentIndex === cards.length - 1}
           />
         </AnimatePresence>
       </div>
