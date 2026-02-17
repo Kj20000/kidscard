@@ -278,7 +278,13 @@ export function CardViewer({ category, cards, settings, onBack, onAddCard, allCa
       {/* Card */}
       <div className="flex-1 flex items-center justify-center">
         <AnimatePresence mode="wait">
-          <FlashCard key={currentCard.id} card={currentCard} onSpeak={speakWord} />
+          <FlashCard 
+            key={currentCard.id} 
+            card={currentCard} 
+            onSpeak={speakWord}
+            onSwipeLeft={goNext}
+            onSwipeRight={goPrev}
+          />
         </AnimatePresence>
       </div>
 

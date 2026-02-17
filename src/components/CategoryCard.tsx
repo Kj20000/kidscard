@@ -34,11 +34,11 @@ export function CategoryCard({ category, cardCount, onClick }: CategoryCardProps
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 20 }}
     >
-      <span className="text-6xl md:text-7xl mb-3">{category.icon}</span>
-      <span className="text-xl md:text-2xl font-bold text-foreground/90">
+      <span className="text-4xl md:text-5xl mb-2">{category.icon}</span>
+      <span className="text-sm md:text-lg font-bold text-foreground/90 text-center leading-tight">
         {category.name}
       </span>
-      <span className="text-sm md:text-base font-semibold text-foreground/60 mt-1">
+      <span className="text-xs md:text-sm font-semibold text-foreground/60 mt-0.5">
         {cardCount} {cardCount === 1 ? 'card' : 'cards'}
       </span>
     </motion.button>

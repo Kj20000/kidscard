@@ -5,9 +5,11 @@ import type { Flashcard } from '@/types/flashcard';
 interface FlashCardProps {
   card: Flashcard;
   onSpeak: () => void;
+  onSwipeLeft?: () => void;
+  onSwipeRight?: () => void;
 }
 
-export function FlashCard({ card, onSpeak }: FlashCardProps) {
+export function FlashCard({ card, onSpeak, onSwipeLeft, onSwipeRight }: FlashCardProps) {
   // Generate a gradient background based on card properties
   const gradients = [
     'from-purple-400 via-pink-400 to-blue-400',
@@ -31,6 +33,16 @@ export function FlashCard({ card, onSpeak }: FlashCardProps) {
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+      drag="x"
+      dragElastic={0.2}
+      onDragEnd={(event, info) => {
+        const swipeThreshold = 50;
+        if (info.offset.x > swipeThreshold) {
+          onSwipeRight?.();
+        } else if (info.offset.x < -swipeThreshold) {
+          onSwipeLeft?.();
+        }
+      }}
     >
       <div className="relative h-full w-full bg-card rounded-3xl card-shadow overflow-hidden flex flex-col">
         {/* Image Section */}

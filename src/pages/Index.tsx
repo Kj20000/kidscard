@@ -90,7 +90,7 @@ const Index = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="min-h-screen p-4 pb-24"
+            className="min-h-screen p-3 pb-24"
           >
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
@@ -120,7 +120,7 @@ const Index = () => {
             </div>
 
             {/* Category Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
               {categories.map((category, index) => (
                 <motion.div
                   key={category.id}
