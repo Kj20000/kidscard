@@ -229,20 +229,20 @@ const Index = () => {
             className="h-[100dvh] p-3 pb-4 flex flex-col overflow-hidden"
           >
             {/* App Bar */}
-            <header className="mb-4 rounded-3xl bg-card/95 backdrop-blur-sm card-shadow px-3 py-3">
+            <header className="mb-4 rounded-3xl bg-gradient-to-r from-primary/25 via-secondary/20 to-accent/20 backdrop-blur-sm card-shadow px-3 py-3 border border-primary/20">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground leading-tight truncate">
+                  <h1 className="text-xl sm:text-2xl font-extrabold text-foreground leading-tight truncate">
                     🎴 Flash Cards
                   </h1>
-                  <p className="text-muted-foreground font-semibold mt-0.5 text-sm sm:text-base truncate">
-                    {isReorderMode
-                      ? 'Drag icons to move them. Tap Done when finished.'
-                      : 'Tap a category to start learning.'}
-                  </p>
+                  {isReorderMode && (
+                    <p className="text-muted-foreground font-semibold mt-0.5 text-sm sm:text-base truncate">
+                      Drag icons to move them. Tap Done when finished.
+                    </p>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1 shrink-0">
                 {isReorderMode && (
                   <Button
                     variant="outline"

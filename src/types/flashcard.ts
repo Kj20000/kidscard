@@ -23,6 +23,7 @@ export interface Category {
 export interface AppSettings {
   autoPlayAudio: boolean;
   voiceSpeed: 'slow' | 'normal';
+  repeatAudio: boolean;
   theme: 'sunshine' | 'ocean' | 'berry';
   enableCloudSync?: boolean;
 }

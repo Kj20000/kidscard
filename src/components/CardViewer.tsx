@@ -70,13 +70,29 @@ export function CardViewer({ category, cards, settings, onBack, onAddCard, allCa
 
   // Auto-play on card change
   useEffect(() => {
-    if (settings.autoPlayAudio && currentCard) {
-      const timer = setTimeout(() => {
-        speak(currentCard.word);
-      }, 300);
-      return () => clearTimeout(timer);
+    if (!settings.autoPlayAudio || !currentCard) {
+      return;
     }
-  }, [currentIndex, currentCard, settings.autoPlayAudio, speak]);
+
+    const initialTimer = window.setTimeout(() => {
+      speak(currentCard.word);
+    }, 300);
+
+    if (!settings.repeatAudio) {
+      return () => {
+        window.clearTimeout(initialTimer);
+      };
+    }
+
+    const repeatTimer = window.setInterval(() => {
+      speak(currentCard.word);
+    }, 3000);
+
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(repeatTimer);
+    };
+  }, [currentCard, settings.autoPlayAudio, settings.repeatAudio, speak]);
 
   const goNext = () => {
     if (currentIndex < cards.length - 1) {

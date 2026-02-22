@@ -23,6 +23,7 @@ export function useFlashcards() {
   const [settings, setSettings] = useState<AppSettings>({
     autoPlayAudio: true,
     voiceSpeed: 'normal',
+    repeatAudio: false,
     theme: 'sunshine',
     enableCloudSync: false,
   });

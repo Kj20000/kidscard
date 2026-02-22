@@ -55,6 +55,7 @@
  const DEFAULT_SETTINGS: AppSettings = {
    autoPlayAudio: true,
    voiceSpeed: 'normal',
+   repeatAudio: false,
   theme: 'sunshine',
    enableCloudSync: false,
  };

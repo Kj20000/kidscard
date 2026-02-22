@@ -57,7 +57,7 @@ export function SyncButton({ syncState, onSync, isEnabled }: SyncButtonProps) {
       if (ago < 60) return `${ago}m ago`;
       return `${Math.round(ago / 60)}h ago`;
     }
-    return 'Sync now';
+    return '';
   };
 
   const buttonBg = () => {
@@ -80,6 +80,11 @@ export function SyncButton({ syncState, onSync, isEnabled }: SyncButtonProps) {
       whileHover={{ scale: syncState.isOnline && !syncState.isSyncing ? 1.02 : 1 }}
       whileTap={{ scale: syncState.isOnline && !syncState.isSyncing ? 0.98 : 1 }}
     >
+      {(() => {
+        const statusText = getStatusText();
+
+        return (
+          <>
       <AnimatePresence mode="wait">
         <motion.div
           key={`${syncState.isSyncing}-${showSuccess}-${showError}-${syncState.isOnline}`}
@@ -91,9 +96,11 @@ export function SyncButton({ syncState, onSync, isEnabled }: SyncButtonProps) {
           {getStatusIcon()}
         </motion.div>
       </AnimatePresence>
-      <span className="text-sm font-semibold text-foreground">
-        {getStatusText()}
-      </span>
+      {statusText && (
+        <span className="text-sm font-semibold text-foreground">
+          {statusText}
+        </span>
+      )}
       
       {syncState.pendingChanges > 0 && !syncState.isSyncing && syncState.isOnline && (
         <motion.span
@@ -102,6 +109,9 @@ export function SyncButton({ syncState, onSync, isEnabled }: SyncButtonProps) {
           className="w-2 h-2 rounded-full bg-primary"
         />
       )}
+          </>
+        );
+      })()}
     </motion.button>
   );
 }

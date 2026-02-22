@@ -666,6 +666,21 @@ export function SettingsPage({
               </div>
             </div>
           </Card>
+
+          <Card className="p-4 rounded-2xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-bold text-lg">Repeat Audio</p>
+                <p className="text-sm text-muted-foreground">
+                  Repeat current card word every 3 seconds
+                </p>
+              </div>
+              <Switch
+                checked={settings.repeatAudio}
+                onCheckedChange={(checked) => onUpdateSettings({ repeatAudio: checked })}
+              />
+            </div>
+          </Card>
         </div>
       )}
 
