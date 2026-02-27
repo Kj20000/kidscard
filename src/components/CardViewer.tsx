@@ -188,6 +188,14 @@ export function CardViewer({ category, cards, settings, onBack, onAddCard, allCa
             >
               <Upload className="w-5 h-5" />
             </Button>
+            <Button
+              onClick={handleAddCard}
+              className="h-12 px-4 bg-secondary text-secondary-foreground rounded-xl font-semibold"
+              disabled={!newCardWord.trim() || !newCardImage.trim()}
+            >
+              <Check className="w-5 h-5 mr-2" />
+              Save
+            </Button>
           </div>
 
           {newCardImage && (
@@ -198,15 +206,7 @@ export function CardViewer({ category, cards, settings, onBack, onAddCard, allCa
 
           <div className="flex-1" />
 
-          <div className="flex gap-2">
-            <Button
-              onClick={handleAddCard}
-              className="flex-1 h-12 bg-secondary text-secondary-foreground rounded-xl font-semibold"
-              disabled={!newCardWord.trim() || !newCardImage.trim()}
-            >
-              <Check className="w-5 h-5 mr-2" />
-              Save Card
-            </Button>
+          <div className="flex justify-end">
             <Button
               variant="outline"
               onClick={() => setIsAddingCard(false)}
