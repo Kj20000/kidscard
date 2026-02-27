@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Flashcard, Category, AppSettings } from '@/types/flashcard';
 import { useOfflineStorage } from './useOfflineStorage';
 import { useFlashcardSync, ENABLE_CLOUD_SYNC } from './useFlashcardSync';
+import { supabase } from '@/integrations/supabase/client';
 
 const sortCategories = (items: Category[]) =>
   [...items].sort((a, b) => {
@@ -30,6 +31,52 @@ export function useFlashcards() {
   const [isLoading, setIsLoading] = useState(true);
   
   const initialized = useRef(false);
+  const cloudHydrationInProgress = useRef(false);
+
+  const refreshFromStorage = useCallback(async () => {
+    const [loadedCategories, loadedCards, loadedSettings] = await Promise.all([
+      storage.getAllCategories(),
+      storage.getAllCards(),
+      storage.getSettings(),
+    ]);
+
+    setCategories(sortCategories(loadedCategories));
+    setCards(loadedCards);
+    setSettings(loadedSettings);
+  }, [storage]);
+
+  const hydrateFromCloud = useCallback(async () => {
+    if (!ENABLE_CLOUD_SYNC || !sync.syncState.isOnline || cloudHydrationInProgress.current) {
+      return;
+    }
+
+    cloudHydrationInProgress.current = true;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      const maxAttempts = 3;
+      let syncResult = { success: false, error: 'Sync did not start' };
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        syncResult = await sync.fullSync();
+        if (syncResult.success) break;
+
+        if (attempt < maxAttempts) {
+          await new Promise((resolve) => window.setTimeout(resolve, attempt * 500));
+        }
+      }
+
+      if (syncResult.success) {
+        await refreshFromStorage();
+      }
+    } catch (error) {
+      console.error('Cloud hydration failed:', error);
+    } finally {
+      cloudHydrationInProgress.current = false;
+    }
+  }, [refreshFromStorage, sync]);
 
   // Load data from IndexedDB on mount
   useEffect(() => {
@@ -38,15 +85,7 @@ export function useFlashcards() {
       initialized.current = true;
       
       try {
-        const [loadedCategories, loadedCards, loadedSettings] = await Promise.all([
-          storage.getAllCategories(),
-          storage.getAllCards(),
-          storage.getSettings(),
-        ]);
-        
-        setCategories(sortCategories(loadedCategories));
-        setCards(loadedCards);
-        setSettings(loadedSettings);
+        await refreshFromStorage();
       } catch (error) {
         console.error('Failed to load data from IndexedDB:', error);
         // Fall back to defaults
@@ -55,11 +94,27 @@ export function useFlashcards() {
         setSettings(storage.DEFAULT_SETTINGS);
       } finally {
         setIsLoading(false);
+        hydrateFromCloud();
       }
     };
 
     loadData();
-  }, [storage]);
+  }, [hydrateFromCloud, refreshFromStorage, storage]);
+
+  // Re-hydrate from cloud immediately after auth is established/refreshed
+  useEffect(() => {
+    if (!ENABLE_CLOUD_SYNC) return;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session?.user) return;
+
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+        hydrateFromCloud();
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [hydrateFromCloud]);
 
   const getCardsByCategory = useCallback(
     (categoryId: string) => cards.filter((card) => card.categoryId === categoryId),

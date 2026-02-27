@@ -23,34 +23,7 @@
   { id: 'nature', name: 'Nature', icon: '🌸', color: 'peach', order: 5, createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
  ];
  
- const DEFAULT_CARDS: Flashcard[] = [
-   // Animals
-   { id: 'a1', word: 'Cat', imageUrl: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&h=400&fit=crop', categoryId: 'animals', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'a2', word: 'Dog', imageUrl: 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=400&h=400&fit=crop', categoryId: 'animals', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'a3', word: 'Bird', imageUrl: 'https://images.unsplash.com/photo-1444464666168-49d633b86797?w=400&h=400&fit=crop', categoryId: 'animals', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'a4', word: 'Fish', imageUrl: 'https://images.unsplash.com/photo-1524704654690-b56c05c78a00?w=400&h=400&fit=crop', categoryId: 'animals', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'a5', word: 'Elephant', imageUrl: 'https://images.unsplash.com/photo-1557050543-4d5f4e07ef46?w=400&h=400&fit=crop', categoryId: 'animals', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   // Colors
-   { id: 'c1', word: 'Red', imageUrl: 'https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=400&h=400&fit=crop&color=ff0000', categoryId: 'colors', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'c2', word: 'Blue', imageUrl: 'https://images.unsplash.com/photo-1558470598-a5dda9640f68?w=400&h=400&fit=crop', categoryId: 'colors', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'c3', word: 'Yellow', imageUrl: 'https://images.unsplash.com/photo-1495542779398-9fec7dc7986c?w=400&h=400&fit=crop', categoryId: 'colors', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'c4', word: 'Green', imageUrl: 'https://images.unsplash.com/photo-1564419320461-6870880221ad?w=400&h=400&fit=crop', categoryId: 'colors', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   // Numbers
-   { id: 'n1', word: 'One', imageUrl: 'https://images.unsplash.com/photo-1586282391129-76a6df230234?w=400&h=400&fit=crop', categoryId: 'numbers', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'n2', word: 'Two', imageUrl: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=400&fit=crop', categoryId: 'numbers', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'n3', word: 'Three', imageUrl: 'https://images.unsplash.com/photo-1546552768-9e3a94b38a59?w=400&h=400&fit=crop', categoryId: 'numbers', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   // Food
-   { id: 'f1', word: 'Apple', imageUrl: 'https://images.unsplash.com/photo-1568702846914-96b305d2uj69?w=400&h=400&fit=crop', categoryId: 'food', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'f2', word: 'Banana', imageUrl: 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&h=400&fit=crop', categoryId: 'food', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'f3', word: 'Orange', imageUrl: 'https://images.unsplash.com/photo-1547514701-42782101795e?w=400&h=400&fit=crop', categoryId: 'food', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   // Shapes
-   { id: 's1', word: 'Circle', imageUrl: 'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?w=400&h=400&fit=crop', categoryId: 'shapes', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 's2', word: 'Star', imageUrl: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=400&h=400&fit=crop', categoryId: 'shapes', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   // Nature
-   { id: 'na1', word: 'Flower', imageUrl: 'https://images.unsplash.com/photo-1490750967868-88aa4486c946?w=400&h=400&fit=crop', categoryId: 'nature', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'na2', word: 'Tree', imageUrl: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=400&h=400&fit=crop', categoryId: 'nature', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-   { id: 'na3', word: 'Sun', imageUrl: 'https://images.unsplash.com/photo-1495107334309-fcf20504a5ab?w=400&h=400&fit=crop', categoryId: 'nature', createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
- ];
+const DEFAULT_CARDS: Flashcard[] = [];
  
  const DEFAULT_SETTINGS: AppSettings = {
    autoPlayAudio: true,
