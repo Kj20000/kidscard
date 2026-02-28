@@ -5,6 +5,9 @@ import { supabase } from '@/integrations/supabase/client';
 
 // Feature flag for cloud sync - now enabled!
 export const ENABLE_CLOUD_SYNC = true;
+const SYNC_BATCH_SIZE = 50;
+const PULL_PAGE_SIZE = 100;
+const TRANSIENT_FAILURE_COOLDOWN_MS = 30_000;
  
  interface SyncResult {
    success: boolean;
@@ -21,8 +24,27 @@ const isTransientNetworkError = (message: string) => {
     normalized.includes('cors') ||
     normalized.includes('http/3 525') ||
     normalized.includes('status code: 525') ||
-    normalized.includes('fetch resource')
+    normalized.includes('fetch resource') ||
+    normalized.includes('statement timeout') ||
+    normalized.includes('canceling statement') ||
+    normalized.includes('code: "57014"') ||
+    normalized.includes('57014') ||
+    normalized.includes('aborterror') ||
+    normalized.includes('operation was aborted')
   );
+};
+
+const chunkArray = <T>(items: T[], chunkSize: number): T[][] => {
+  if (items.length === 0) {
+    return [];
+  }
+
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+
+  return chunks;
 };
 
 const normalizeSyncErrorMessage = (error: unknown, fallback: string) => {
@@ -34,6 +56,14 @@ const normalizeSyncErrorMessage = (error: unknown, fallback: string) => {
   }
 
   return fallback;
+};
+
+const shouldLogAsError = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return true;
+  }
+
+  return !isTransientNetworkError(error.message);
 };
 
 const normalizeCategoryName = (name: string) => name.trim().toLowerCase();
@@ -114,6 +144,7 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
    });
    
    const syncInProgress = useRef(false);
+  const retryBlockedUntil = useRef(0);
  
    // Track online/offline status
    useEffect(() => {
@@ -192,6 +223,10 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
       return { success: false, error: 'Device is offline' };
     }
 
+    if (Date.now() < retryBlockedUntil.current) {
+      return { success: false, error: 'Cloud sync temporarily unavailable. Changes are saved locally.' };
+    }
+
     if (syncInProgress.current) {
       return { success: false, error: 'Sync already in progress' };
     }
@@ -222,13 +257,16 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
           updated_at: new Date(cat.updatedAt || Date.now()).toISOString(),
         }));
 
-        const { error: catError } = await supabase
-          .from('categories')
-          .upsert(categoriesToSync, { onConflict: 'id' });
+        const categoryBatches = chunkArray(categoriesToSync, SYNC_BATCH_SIZE);
+        for (const batch of categoryBatches) {
+          const { error: catError } = await supabase
+            .from('categories')
+            .upsert(batch, { onConflict: 'id' });
 
-        if (catError) {
-          console.error('Category sync error:', catError);
-          throw new Error(`Category sync failed: ${catError.message}`);
+          if (catError) {
+            console.error('Category sync error:', catError);
+            throw new Error(`Category sync failed: ${catError.message}`);
+          }
         }
 
         // Mark categories as synced locally
@@ -251,13 +289,16 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
           updated_at: new Date(card.updatedAt || Date.now()).toISOString(),
         }));
 
-        const { error: cardError } = await supabase
-          .from('flashcards')
-          .upsert(cardsToSync, { onConflict: 'id' });
+        const cardBatches = chunkArray(cardsToSync, SYNC_BATCH_SIZE);
+        for (const batch of cardBatches) {
+          const { error: cardError } = await supabase
+            .from('flashcards')
+            .upsert(batch, { onConflict: 'id' });
 
-        if (cardError) {
-          console.error('Flashcard sync error:', cardError);
-          throw new Error(`Flashcard sync failed: ${cardError.message}`);
+          if (cardError) {
+            console.error('Flashcard sync error:', cardError);
+            throw new Error(`Flashcard sync failed: ${cardError.message}`);
+          }
         }
 
         // Mark cards as synced locally
@@ -275,6 +316,7 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
         lastSyncedAt: Date.now(),
         pendingChanges: 0,
       }));
+      retryBlockedUntil.current = 0;
 
       return {
         success: true,
@@ -282,11 +324,17 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
         syncedCategories: pendingCategories.length,
       };
     } catch (error) {
-      console.error('Sync failed:', error);
+      const normalizedMessage = normalizeSyncErrorMessage(error, 'Unknown sync error');
+      if (isTransientNetworkError(normalizedMessage)) {
+        retryBlockedUntil.current = Date.now() + TRANSIENT_FAILURE_COOLDOWN_MS;
+      }
+      if (shouldLogAsError(error)) {
+        console.error('Sync failed:', error);
+      }
       setSyncState(prev => ({ ...prev, isSyncing: false }));
       return {
         success: false,
-        error: normalizeSyncErrorMessage(error, 'Unknown sync error'),
+        error: normalizedMessage,
       };
     } finally {
       syncInProgress.current = false;
@@ -301,6 +349,10 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
 
     if (!syncState.isOnline) {
       return { success: false, error: 'Device is offline' };
+    }
+
+    if (Date.now() < retryBlockedUntil.current) {
+      return { success: false, error: 'Cloud sync temporarily unavailable. Changes are saved locally.' };
     }
 
     try {
@@ -325,13 +377,33 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
       }
 
       // Fetch flashcards from cloud
-      const { data: remoteCards, error: cardError } = await supabase
-        .from('flashcards')
-        .select('*')
-        .eq('user_id', user.id);
+      const remoteCards: Array<{
+        id: string;
+        word: string;
+        image_url: string;
+        category_id: string;
+        created_at: string;
+        updated_at: string;
+      }> = [];
 
-      if (cardError) {
-        throw new Error(`Failed to fetch flashcards: ${cardError.message}`);
+      for (let offset = 0; ; offset += PULL_PAGE_SIZE) {
+        const { data: pageCards, error: cardError } = await supabase
+          .from('flashcards')
+          .select('id,word,image_url,category_id,created_at,updated_at')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false })
+          .range(offset, offset + PULL_PAGE_SIZE - 1);
+
+        if (cardError) {
+          throw new Error(`Failed to fetch flashcards: ${cardError.message}`);
+        }
+
+        const batch = pageCards || [];
+        remoteCards.push(...batch);
+
+        if (batch.length < PULL_PAGE_SIZE) {
+          break;
+        }
       }
 
       // Convert remote data to local format and merge
@@ -374,6 +446,7 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
         isSyncing: false,
         lastSyncedAt: Date.now(),
       }));
+      retryBlockedUntil.current = 0;
 
       return { 
         success: true,
@@ -381,11 +454,17 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
         syncedCards: remappedCards.length,
       };
     } catch (error) {
-      console.error('Pull failed:', error);
+      const normalizedMessage = normalizeSyncErrorMessage(error, 'Unknown pull error');
+      if (isTransientNetworkError(normalizedMessage)) {
+        retryBlockedUntil.current = Date.now() + TRANSIENT_FAILURE_COOLDOWN_MS;
+      }
+      if (shouldLogAsError(error)) {
+        console.error('Pull failed:', error);
+      }
       setSyncState(prev => ({ ...prev, isSyncing: false }));
       return {
         success: false,
-        error: normalizeSyncErrorMessage(error, 'Unknown pull error'),
+        error: normalizedMessage,
       };
     }
   }, [syncState.isOnline, storage, mergeData]);
