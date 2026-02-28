@@ -4,7 +4,6 @@ import { Settings, Loader2, Palette } from 'lucide-react';
 import { CategoryCard } from '@/components/CategoryCard';
 import { CardViewer } from '@/components/CardViewer';
 import { SettingsPage } from '@/components/SettingsPage';
-import { ParentGate } from '@/components/ParentGate';
 import { SyncButton } from '@/components/SyncButton';
 import { useFlashcards } from '@/hooks/useFlashcards';
 import type { Category } from '@/types/flashcard';
@@ -108,7 +107,6 @@ const Index = () => {
 
   const [view, setView] = useState<View>('home');
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [showParentGate, setShowParentGate] = useState(false);
   const [isReorderMode, setIsReorderMode] = useState(false);
   const longPressTimerRef = useRef<number | null>(null);
   const sensors = useSensors(
@@ -140,11 +138,6 @@ const Index = () => {
   };
 
   const handleSettingsClick = () => {
-    setShowParentGate(true);
-  };
-
-  const handleParentGateSuccess = () => {
-    setShowParentGate(false);
     setView('settings');
   };
 
@@ -210,15 +203,6 @@ const Index = () => {
 
   return (
     <div className="h-[100dvh] bg-background font-nunito overflow-hidden">
-      <AnimatePresence mode="wait">
-        {showParentGate && (
-          <ParentGate
-            onSuccess={handleParentGateSuccess}
-            onCancel={() => setShowParentGate(false)}
-          />
-        )}
-      </AnimatePresence>
-
       <AnimatePresence mode="wait">
         {view === 'home' && (
           <motion.div
