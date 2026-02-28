@@ -69,20 +69,21 @@ export function useFlashcards() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
 
-      const maxAttempts = 3;
-      let syncResult = { success: false, error: 'Sync did not start' };
+      const maxAttempts = 2;
+      let syncResult = { success: false, error: 'Cloud pull did not start' };
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-        syncResult = await sync.fullSync();
+        syncResult = await sync.pullFromCloud();
         if (syncResult.success) break;
 
         if (attempt < maxAttempts) {
-          await new Promise((resolve) => window.setTimeout(resolve, attempt * 500));
+          await new Promise((resolve) => window.setTimeout(resolve, 250));
         }
       }
 
       if (syncResult.success) {
         await refreshFromStorage();
+        sync.syncToCloud();
       }
     } catch (error) {
       console.error('Cloud hydration failed:', error);

@@ -64,7 +64,7 @@ function SortableCategoryItem({
       }}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.06 }}
+      transition={{ delay: Math.min(index * 0.02, 0.2) }}
       className={`${isReorderMode ? 'icon-jiggle' : ''} ${isDragging ? 'z-20 scale-105' : ''}`}
       onPointerDown={onPressStart}
       onPointerUp={onPressEnd}
@@ -127,6 +127,16 @@ const Index = () => {
       }),
     [categories]
   );
+
+  const cardCountByCategory = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const card of cards) {
+      counts.set(card.categoryId, (counts.get(card.categoryId) ?? 0) + 1);
+    }
+
+    return counts;
+  }, [cards]);
 
   const handleCategorySelect = (category: Category) => {
     setSelectedCategory(category);
@@ -290,7 +300,7 @@ const Index = () => {
                     <SortableCategoryItem
                       key={category.id}
                       category={category}
-                      cardCount={getCardsByCategory(category.id).length}
+                      cardCount={cardCountByCategory.get(category.id) ?? 0}
                       index={index}
                       isReorderMode={isReorderMode}
                       onSelect={() => handleCategorySelect(category)}

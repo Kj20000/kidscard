@@ -2,6 +2,92 @@
  import { useCallback } from 'react';
  import type { Flashcard, Category, AppSettings } from '@/types/flashcard';
 
+const DB_NAME = 'flashcards-db';
+const REQUIRED_STORES = ['flashcards', 'categories', 'images', 'settings'] as const;
+
+let ensureStoresPromise: Promise<void> | null = null;
+
+const openDatabase = (version?: number): Promise<IDBDatabase> =>
+  new Promise((resolve, reject) => {
+    const request = version === undefined ? indexedDB.open(DB_NAME) : indexedDB.open(DB_NAME, version);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      REQUIRED_STORES.forEach((storeName) => {
+        if (!db.objectStoreNames.contains(storeName)) {
+          db.createObjectStore(storeName);
+        }
+      });
+    };
+
+    request.onsuccess = () => {
+      resolve(request.result);
+    };
+
+    request.onerror = () => {
+      reject(request.error ?? new Error('Failed to open IndexedDB'));
+    };
+  });
+
+const ensureObjectStores = async (): Promise<void> => {
+  if (typeof indexedDB === 'undefined') {
+    return;
+  }
+
+  if (!ensureStoresPromise) {
+    ensureStoresPromise = (async () => {
+      const db = await openDatabase();
+      const hasAllStores = REQUIRED_STORES.every((storeName) => db.objectStoreNames.contains(storeName));
+
+      if (hasAllStores) {
+        db.close();
+        return;
+      }
+
+      const targetVersion = db.version + 1;
+      db.close();
+
+      const upgradedDb = await openDatabase(targetVersion);
+      upgradedDb.close();
+    })();
+  }
+
+  try {
+    await ensureStoresPromise;
+  } catch (error) {
+    ensureStoresPromise = null;
+    throw error;
+  }
+};
+
+const isMissingObjectStoreError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return message.includes('object store') && (
+    message.includes('not a known') ||
+    message.includes('not found') ||
+    message.includes('no objectstore')
+  );
+};
+
+const withStoreRecovery = async <T>(operation: () => Promise<T>): Promise<T> => {
+  try {
+    await ensureObjectStores();
+    return await operation();
+  } catch (error) {
+    if (!isMissingObjectStoreError(error)) {
+      throw error;
+    }
+
+    ensureStoresPromise = null;
+    await ensureObjectStores();
+    return operation();
+  }
+};
+
  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
  const isUuid = (value: string) => UUID_REGEX.test(value);
@@ -38,10 +124,10 @@
  };
  
  // Create separate stores for different data types
- const flashcardsStore = createStore('flashcards-db', 'flashcards');
- const categoriesStore = createStore('flashcards-db', 'categories');
- const imagesStore = createStore('flashcards-db', 'images');
- const settingsStore = createStore('flashcards-db', 'settings');
+ const flashcardsStore = createStore(DB_NAME, 'flashcards');
+ const categoriesStore = createStore(DB_NAME, 'categories');
+ const imagesStore = createStore(DB_NAME, 'images');
+ const settingsStore = createStore(DB_NAME, 'settings');
  
  const STORAGE_KEYS = {
    ALL_CARDS: 'all_cards',
@@ -67,10 +153,10 @@ const DEFAULT_CARDS: Flashcard[] = [];
    // Cards operations
    const getAllCards = useCallback(async (): Promise<Flashcard[]> => {
      try {
-       const cards = await get<Flashcard[]>(STORAGE_KEYS.ALL_CARDS, flashcardsStore);
+      const cards = await withStoreRecovery(() => get<Flashcard[]>(STORAGE_KEYS.ALL_CARDS, flashcardsStore));
        if (!cards) {
          // Initialize with defaults
-         await set(STORAGE_KEYS.ALL_CARDS, DEFAULT_CARDS, flashcardsStore);
+        await withStoreRecovery(() => set(STORAGE_KEYS.ALL_CARDS, DEFAULT_CARDS, flashcardsStore));
          return DEFAULT_CARDS;
        }
        return cards;
@@ -82,7 +168,7 @@ const DEFAULT_CARDS: Flashcard[] = [];
  
    const saveAllCards = useCallback(async (cards: Flashcard[]): Promise<void> => {
      try {
-       await set(STORAGE_KEYS.ALL_CARDS, cards, flashcardsStore);
+      await withStoreRecovery(() => set(STORAGE_KEYS.ALL_CARDS, cards, flashcardsStore));
      } catch (error) {
        console.error('Failed to save cards to IndexedDB:', error);
      }
@@ -105,7 +191,7 @@ const DEFAULT_CARDS: Flashcard[] = [];
      await saveAllCards(filtered);
      // Also delete associated image if stored locally
      try {
-       await del(cardId, imagesStore);
+      await withStoreRecovery(() => del(cardId, imagesStore));
      } catch (error) {
        // Image may not exist locally
      }
@@ -113,7 +199,7 @@ const DEFAULT_CARDS: Flashcard[] = [];
  
    const saveAllCategories = useCallback(async (categories: Category[]): Promise<void> => {
      try {
-       await set(STORAGE_KEYS.ALL_CATEGORIES, categories, categoriesStore);
+      await withStoreRecovery(() => set(STORAGE_KEYS.ALL_CATEGORIES, categories, categoriesStore));
      } catch (error) {
        console.error('Failed to save categories to IndexedDB:', error);
      }
@@ -122,9 +208,13 @@ const DEFAULT_CARDS: Flashcard[] = [];
    // Categories operations
    const getAllCategories = useCallback(async (): Promise<Category[]> => {
      try {
-       const categories = await get<Category[]>(STORAGE_KEYS.ALL_CATEGORIES, categoriesStore);
+      const categories = await withStoreRecovery(() =>
+        get<Category[]>(STORAGE_KEYS.ALL_CATEGORIES, categoriesStore)
+      );
        if (!categories) {
-         await set(STORAGE_KEYS.ALL_CATEGORIES, DEFAULT_CATEGORIES, categoriesStore);
+        await withStoreRecovery(() =>
+          set(STORAGE_KEYS.ALL_CATEGORIES, DEFAULT_CATEGORIES, categoriesStore)
+        );
          return DEFAULT_CATEGORIES;
        }
 
@@ -220,9 +310,11 @@ const DEFAULT_CARDS: Flashcard[] = [];
    // Settings operations
    const getSettings = useCallback(async (): Promise<AppSettings> => {
      try {
-       const settings = await get<AppSettings>(STORAGE_KEYS.SETTINGS, settingsStore);
+      const settings = await withStoreRecovery(() =>
+        get<AppSettings>(STORAGE_KEYS.SETTINGS, settingsStore)
+      );
        if (!settings) {
-         await set(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS, settingsStore);
+        await withStoreRecovery(() => set(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS, settingsStore));
          return DEFAULT_SETTINGS;
        }
       return { ...DEFAULT_SETTINGS, ...settings };
@@ -234,7 +326,7 @@ const DEFAULT_CARDS: Flashcard[] = [];
  
    const saveSettings = useCallback(async (settings: AppSettings): Promise<void> => {
      try {
-       await set(STORAGE_KEYS.SETTINGS, settings, settingsStore);
+      await withStoreRecovery(() => set(STORAGE_KEYS.SETTINGS, settings, settingsStore));
      } catch (error) {
        console.error('Failed to save settings to IndexedDB:', error);
      }
@@ -243,7 +335,7 @@ const DEFAULT_CARDS: Flashcard[] = [];
    // Image operations (store base64 locally)
    const saveImage = useCallback(async (cardId: string, imageData: string): Promise<void> => {
      try {
-       await set(cardId, imageData, imagesStore);
+      await withStoreRecovery(() => set(cardId, imageData, imagesStore));
      } catch (error) {
        console.error('Failed to save image to IndexedDB:', error);
      }
@@ -251,7 +343,7 @@ const DEFAULT_CARDS: Flashcard[] = [];
  
    const getImage = useCallback(async (cardId: string): Promise<string | undefined> => {
      try {
-       return await get<string>(cardId, imagesStore);
+      return await withStoreRecovery(() => get<string>(cardId, imagesStore));
      } catch (error) {
        console.error('Failed to get image from IndexedDB:', error);
        return undefined;
@@ -260,7 +352,7 @@ const DEFAULT_CARDS: Flashcard[] = [];
  
    const deleteImage = useCallback(async (cardId: string): Promise<void> => {
      try {
-       await del(cardId, imagesStore);
+      await withStoreRecovery(() => del(cardId, imagesStore));
      } catch (error) {
        console.error('Failed to delete image from IndexedDB:', error);
      }
