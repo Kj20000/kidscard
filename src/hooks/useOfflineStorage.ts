@@ -111,6 +111,14 @@ const DEFAULT_CARDS: Flashcard[] = [];
      }
    }, [getAllCards, saveAllCards]);
  
+   const saveAllCategories = useCallback(async (categories: Category[]): Promise<void> => {
+     try {
+       await set(STORAGE_KEYS.ALL_CATEGORIES, categories, categoriesStore);
+     } catch (error) {
+       console.error('Failed to save categories to IndexedDB:', error);
+     }
+   }, []);
+
    // Categories operations
    const getAllCategories = useCallback(async (): Promise<Category[]> => {
      try {
@@ -191,14 +199,6 @@ const DEFAULT_CARDS: Flashcard[] = [];
        return DEFAULT_CATEGORIES;
      }
    }, [getAllCards, saveAllCards, saveAllCategories]);
- 
-   const saveAllCategories = useCallback(async (categories: Category[]): Promise<void> => {
-     try {
-       await set(STORAGE_KEYS.ALL_CATEGORIES, categories, categoriesStore);
-     } catch (error) {
-       console.error('Failed to save categories to IndexedDB:', error);
-     }
-   }, []);
  
    const saveCategory = useCallback(async (category: Category): Promise<void> => {
      const categories = await getAllCategories();
