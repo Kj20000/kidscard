@@ -23,6 +23,18 @@ const sortCategories = (items: Category[]) =>
     return aCreated - bCreated;
   });
 
+const isTransientCloudError = (message: string) => {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('networkerror') ||
+    normalized.includes('failed to fetch') ||
+    normalized.includes('temporarily unavailable') ||
+    normalized.includes('status code: 525') ||
+    normalized.includes('http/3 525') ||
+    normalized.includes('cors')
+  );
+};
+
 
 export function useFlashcards() {
   const storage = useOfflineStorage();
@@ -41,6 +53,7 @@ export function useFlashcards() {
   
   const initialized = useRef(false);
   const cloudHydrationInProgress = useRef(false);
+  const cloudHydrationBlockedUntil = useRef(0);
 
   const refreshFromStorage = useCallback(async () => {
     const [loadedCategories, loadedCards, loadedSettings] = await Promise.all([
@@ -63,18 +76,24 @@ export function useFlashcards() {
       return;
     }
 
+    if (Date.now() < cloudHydrationBlockedUntil.current) {
+      return;
+    }
+
     cloudHydrationInProgress.current = true;
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return;
-
       const maxAttempts = 2;
       let syncResult = { success: false, error: 'Cloud pull did not start' };
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         syncResult = await sync.pullFromCloud();
         if (syncResult.success) break;
+
+        if (syncResult.error && isTransientCloudError(syncResult.error)) {
+          cloudHydrationBlockedUntil.current = Date.now() + 30_000;
+          break;
+        }
 
         if (attempt < maxAttempts) {
           await new Promise((resolve) => window.setTimeout(resolve, 250));
@@ -122,7 +141,7 @@ export function useFlashcards() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session?.user) return;
 
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
         hydrateFromCloud();
       }
     });

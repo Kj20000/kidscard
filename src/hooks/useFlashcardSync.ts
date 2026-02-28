@@ -12,6 +12,97 @@ export const ENABLE_CLOUD_SYNC = true;
    syncedCards?: number;
    syncedCategories?: number;
  }
+
+const isTransientNetworkError = (message: string) => {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('networkerror') ||
+    normalized.includes('failed to fetch') ||
+    normalized.includes('cors') ||
+    normalized.includes('http/3 525') ||
+    normalized.includes('status code: 525') ||
+    normalized.includes('fetch resource')
+  );
+};
+
+const normalizeSyncErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error) {
+    if (isTransientNetworkError(error.message)) {
+      return 'Cloud sync temporarily unavailable. Changes are saved locally.';
+    }
+    return error.message;
+  }
+
+  return fallback;
+};
+
+const normalizeCategoryName = (name: string) => name.trim().toLowerCase();
+
+const pickPreferredCategory = (current: Category, incoming: Category): Category => {
+  const currentSyncedScore = current.syncStatus === 'synced' ? 1 : 0;
+  const incomingSyncedScore = incoming.syncStatus === 'synced' ? 1 : 0;
+  if (incomingSyncedScore !== currentSyncedScore) {
+    return incomingSyncedScore > currentSyncedScore ? incoming : current;
+  }
+
+  const currentUpdated = current.updatedAt ?? 0;
+  const incomingUpdated = incoming.updatedAt ?? 0;
+  if (incomingUpdated !== currentUpdated) {
+    return incomingUpdated > currentUpdated ? incoming : current;
+  }
+
+  return current;
+};
+
+const dedupeCategoriesByName = (
+  categories: Category[]
+): { categories: Category[]; idRemap: Map<string, string> } => {
+  const canonicalByKey = new Map<string, Category>();
+  const idRemap = new Map<string, string>();
+
+  for (const category of categories) {
+    const key = normalizeCategoryName(category.name);
+    const existing = canonicalByKey.get(key);
+
+    if (!existing) {
+      canonicalByKey.set(key, category);
+      continue;
+    }
+
+    const preferred = pickPreferredCategory(existing, category);
+    const replaced = preferred.id !== existing.id;
+
+    canonicalByKey.set(key, preferred);
+
+    if (replaced) {
+      idRemap.set(existing.id, preferred.id);
+    }
+    idRemap.set(category.id, preferred.id);
+  }
+
+  const dedupedCategories = Array.from(canonicalByKey.values());
+  return { categories: dedupedCategories, idRemap };
+};
+
+const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>): Flashcard[] => {
+  if (idRemap.size === 0) {
+    return cards;
+  }
+
+  return cards.map((card) => {
+    const mappedCategoryId = idRemap.get(card.categoryId);
+    if (!mappedCategoryId || mappedCategoryId === card.categoryId) {
+      return card;
+    }
+
+    return {
+      ...card,
+      categoryId: mappedCategoryId,
+      updatedAt: Date.now(),
+      syncStatus: card.syncStatus === 'synced' ? 'pending' : (card.syncStatus ?? 'pending'),
+    };
+  });
+};
  
  export function useFlashcardSync() {
    const storage = useOfflineStorage();
@@ -110,7 +201,8 @@ export const ENABLE_CLOUD_SYNC = true;
       setSyncState(prev => ({ ...prev, isSyncing: true }));
 
       // Check if user is authenticated
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) {
         setSyncState(prev => ({ ...prev, isSyncing: false }));
         return { success: false, error: 'Please sign in to sync' };
@@ -194,7 +286,7 @@ export const ENABLE_CLOUD_SYNC = true;
       setSyncState(prev => ({ ...prev, isSyncing: false }));
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown sync error',
+        error: normalizeSyncErrorMessage(error, 'Unknown sync error'),
       };
     } finally {
       syncInProgress.current = false;
@@ -215,7 +307,8 @@ export const ENABLE_CLOUD_SYNC = true;
       setSyncState(prev => ({ ...prev, isSyncing: true }));
 
       // Check if user is authenticated
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) {
         setSyncState(prev => ({ ...prev, isSyncing: false }));
         return { success: false, error: 'Please sign in to sync' };
@@ -269,8 +362,12 @@ export const ENABLE_CLOUD_SYNC = true;
       const mergedCategories = mergeData(localCategories, convertedCategories);
       const mergedCards = mergeData(localCards, convertedCards);
 
-      await storage.saveAllCategories(mergedCategories);
-      await storage.saveAllCards(mergedCards);
+      const dedupedCategoriesResult = dedupeCategoriesByName(mergedCategories);
+      const dedupedCategories = dedupedCategoriesResult.categories;
+      const remappedCards = remapCardsCategoryIds(mergedCards, dedupedCategoriesResult.idRemap);
+
+      await storage.saveAllCategories(dedupedCategories);
+      await storage.saveAllCards(remappedCards);
 
       setSyncState(prev => ({
         ...prev,
@@ -280,15 +377,15 @@ export const ENABLE_CLOUD_SYNC = true;
 
       return { 
         success: true,
-        syncedCategories: convertedCategories.length,
-        syncedCards: convertedCards.length,
+        syncedCategories: dedupedCategories.length,
+        syncedCards: remappedCards.length,
       };
     } catch (error) {
       console.error('Pull failed:', error);
       setSyncState(prev => ({ ...prev, isSyncing: false }));
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown pull error',
+        error: normalizeSyncErrorMessage(error, 'Unknown pull error'),
       };
     }
   }, [syncState.isOnline, storage, mergeData]);
