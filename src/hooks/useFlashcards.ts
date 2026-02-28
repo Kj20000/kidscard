@@ -3,6 +3,15 @@ import type { Flashcard, Category, AppSettings } from '@/types/flashcard';
 import { useOfflineStorage } from './useOfflineStorage';
 import { useFlashcardSync, ENABLE_CLOUD_SYNC } from './useFlashcardSync';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+const generateClientId = (prefix: 'card' | 'cat') => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+};
 
 const sortCategories = (items: Category[]) =>
   [...items].sort((a, b) => {
@@ -43,6 +52,10 @@ export function useFlashcards() {
     setCategories(sortCategories(loadedCategories));
     setCards(loadedCards);
     setSettings(loadedSettings);
+
+    if (storage.consumeMigrationNotice()) {
+      toast.success('Categories restored', { duration: 250 });
+    }
   }, [storage]);
 
   const hydrateFromCloud = useCallback(async () => {
@@ -125,7 +138,7 @@ export function useFlashcards() {
     const now = Date.now();
     const newCard: Flashcard = {
       ...card,
-      id: `card_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: generateClientId('card'),
       createdAt: now,
       updatedAt: now,
       syncStatus: 'pending',
@@ -178,7 +191,7 @@ export function useFlashcards() {
     const maxOrder = categories.reduce((max, cat) => Math.max(max, cat.order ?? -1), -1);
     const newCategory: Category = {
       ...category,
-      id: `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: generateClientId('cat'),
       order: maxOrder + 1,
       createdAt: now,
       updatedAt: now,

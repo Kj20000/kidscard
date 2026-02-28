@@ -1,6 +1,41 @@
  import { get, set, del, keys, createStore } from 'idb-keyval';
  import { useCallback } from 'react';
  import type { Flashcard, Category, AppSettings } from '@/types/flashcard';
+
+ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+ const isUuid = (value: string) => UUID_REGEX.test(value);
+
+ const generateClientId = (prefix: 'card' | 'cat') => {
+   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+     return crypto.randomUUID();
+   }
+
+   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+ };
+
+ const createDefaultCategories = (): Category[] => {
+   const now = Date.now();
+   const templates: Array<Pick<Category, 'name' | 'icon' | 'color'>> = [
+     { name: 'Animals', icon: '🐾', color: 'coral' },
+     { name: 'Colors', icon: '🎨', color: 'sky' },
+     { name: 'Numbers', icon: '🔢', color: 'mint' },
+     { name: 'Food', icon: '🍎', color: 'sunshine' },
+     { name: 'Shapes', icon: '⭐', color: 'lavender' },
+     { name: 'Nature', icon: '🌸', color: 'peach' },
+   ];
+
+   return templates.map((item, index) => ({
+     id: generateClientId('cat'),
+     name: item.name,
+     icon: item.icon,
+     color: item.color,
+     order: index,
+     createdAt: now + index,
+     updatedAt: now + index,
+     syncStatus: 'pending',
+   }));
+ };
  
  // Create separate stores for different data types
  const flashcardsStore = createStore('flashcards-db', 'flashcards');
@@ -13,15 +48,10 @@
    ALL_CATEGORIES: 'all_categories',
    SETTINGS: 'app_settings',
  };
+
+let hasUnseenMigration = false;
  
- const DEFAULT_CATEGORIES: Category[] = [
-  { id: 'animals', name: 'Animals', icon: '🐾', color: 'coral', order: 0, createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-  { id: 'colors', name: 'Colors', icon: '🎨', color: 'sky', order: 1, createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-  { id: 'numbers', name: 'Numbers', icon: '🔢', color: 'mint', order: 2, createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-  { id: 'food', name: 'Food', icon: '🍎', color: 'sunshine', order: 3, createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-  { id: 'shapes', name: 'Shapes', icon: '⭐', color: 'lavender', order: 4, createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
-  { id: 'nature', name: 'Nature', icon: '🌸', color: 'peach', order: 5, createdAt: Date.now(), updatedAt: Date.now(), syncStatus: 'synced' },
- ];
+ const DEFAULT_CATEGORIES: Category[] = createDefaultCategories();
  
 const DEFAULT_CARDS: Flashcard[] = [];
  
@@ -89,12 +119,78 @@ const DEFAULT_CARDS: Flashcard[] = [];
          await set(STORAGE_KEYS.ALL_CATEGORIES, DEFAULT_CATEGORIES, categoriesStore);
          return DEFAULT_CATEGORIES;
        }
-       return categories;
+
+       const hasLegacyCategoryIds = categories.some((category) => !isUuid(category.id));
+       if (!hasLegacyCategoryIds) {
+         return categories;
+       }
+
+       const now = Date.now();
+       const categoryIdMap = new Map<string, string>();
+       const migratedCategories = categories.map((category) => {
+         if (isUuid(category.id)) {
+           return category;
+         }
+
+         const migratedId = generateClientId('cat');
+         categoryIdMap.set(category.id, migratedId);
+
+         return {
+           ...category,
+           id: migratedId,
+           updatedAt: now,
+           syncStatus: 'pending' as const,
+         };
+       });
+
+       const cards = await getAllCards();
+       const hasLegacyCards = cards.some(
+         (card) => !isUuid(card.id) || categoryIdMap.has(card.categoryId)
+       );
+
+       const migratedCards = hasLegacyCards
+         ? cards.map((card) => {
+             let didChange = false;
+             let nextId = card.id;
+
+             if (!isUuid(card.id)) {
+               nextId = generateClientId('card');
+               didChange = true;
+             }
+
+             const mappedCategoryId = categoryIdMap.get(card.categoryId);
+             const nextCategoryId = mappedCategoryId ?? card.categoryId;
+             if (nextCategoryId !== card.categoryId) {
+               didChange = true;
+             }
+
+             if (!didChange) {
+               return card;
+             }
+
+             return {
+               ...card,
+               id: nextId,
+               categoryId: nextCategoryId,
+               updatedAt: now,
+               syncStatus: 'pending' as const,
+             };
+           })
+         : cards;
+
+       await Promise.all([
+         saveAllCategories(migratedCategories),
+         hasLegacyCards ? saveAllCards(migratedCards) : Promise.resolve(),
+       ]);
+
+       hasUnseenMigration = true;
+
+       return migratedCategories;
      } catch (error) {
        console.error('Failed to get categories from IndexedDB:', error);
        return DEFAULT_CATEGORIES;
      }
-   }, []);
+   }, [getAllCards, saveAllCards, saveAllCategories]);
  
    const saveAllCategories = useCallback(async (categories: Category[]): Promise<void> => {
      try {
@@ -187,6 +283,15 @@ const DEFAULT_CARDS: Flashcard[] = [];
      await saveAllCategories(DEFAULT_CATEGORIES);
      await saveSettings(DEFAULT_SETTINGS);
    }, [saveAllCards, saveAllCategories, saveSettings]);
+
+   const consumeMigrationNotice = useCallback((): boolean => {
+     if (!hasUnseenMigration) {
+       return false;
+     }
+
+     hasUnseenMigration = false;
+     return true;
+   }, []);
  
    return {
      // Cards
@@ -210,6 +315,7 @@ const DEFAULT_CARDS: Flashcard[] = [];
      deleteImage,
      // Utils
      resetToDefaults,
+     consumeMigrationNotice,
      DEFAULT_CARDS,
      DEFAULT_CATEGORIES,
      DEFAULT_SETTINGS,
