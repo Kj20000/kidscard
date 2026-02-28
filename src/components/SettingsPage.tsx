@@ -405,9 +405,11 @@ export function SettingsPage({
                     <img src={card.imageUrl} alt={card.word} className="w-full h-full object-contain" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-lg truncate">{card.word}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {category?.icon} {category?.name}
+                    <p className="font-bold text-lg truncate">
+                      {card.word}{' '}
+                      <span className="text-xs font-medium text-muted-foreground normal-case">
+                        ({(category?.name ?? 'uncategorized').toLowerCase()})
+                      </span>
                     </p>
                   </div>
                   <button
