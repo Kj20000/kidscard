@@ -215,7 +215,7 @@ export function SettingsPage({
       </div>
 
       {/* Tabs */}
-      <div className="grid grid-cols-4 gap-1 mb-3 bg-muted p-1 rounded-2xl shrink-0">
+      <div className="grid grid-cols-4 gap-1 mb-3 bg-muted p-1 rounded-2xl shrink-0 sticky top-0 z-10">
         {(['cards', 'categories', 'settings', 'account'] as Tab[]).map((tab) => (
           <button
             key={tab}
@@ -231,7 +231,7 @@ export function SettingsPage({
         ))}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto">
 
       {/* Cards Tab */}
       {activeTab === 'cards' && (
@@ -318,7 +318,7 @@ export function SettingsPage({
           )}
 
           {/* Card List */}
-          <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 gap-2 content-start overflow-hidden">
+          <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 gap-2 content-start overflow-y-auto pr-1">
             {cards.map((card) => {
               const category = categories.find((c) => c.id === card.categoryId);
               const isEditing = editingCardId === card.id;
@@ -511,7 +511,7 @@ export function SettingsPage({
           )}
 
           {/* Category List */}
-          <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 gap-2 content-start overflow-hidden">
+          <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 gap-2 content-start overflow-y-auto pr-1">
             {categories.map((category) => {
               const isEditing = editingCategoryId === category.id;
 

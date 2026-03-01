@@ -138,16 +138,33 @@ export function useFlashcards() {
   useEffect(() => {
     if (!ENABLE_CLOUD_SYNC) return;
 
+    const runAutoSync = async (showSyncedToast: boolean) => {
+      if (!sync.syncState.isOnline) return;
+
+      const syncResult = await sync.fullSync();
+      if (!syncResult.success) {
+        if (syncResult.error && !isTransientCloudError(syncResult.error)) {
+          toast.error(syncResult.error);
+        }
+        return;
+      }
+
+      await refreshFromStorage();
+      if (showSyncedToast) {
+        toast.success('Synced', { duration: 250 });
+      }
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session?.user) return;
 
       if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-        hydrateFromCloud();
+        void runAutoSync(event === 'SIGNED_IN');
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [hydrateFromCloud]);
+  }, [refreshFromStorage, sync.fullSync, sync.syncState.isOnline]);
 
   const getCardsByCategory = useCallback(
     (categoryId: string) => cards.filter((card) => card.categoryId === categoryId),

@@ -4,7 +4,6 @@ import { Settings, Loader2, Palette } from 'lucide-react';
 import { CategoryCard } from '@/components/CategoryCard';
 import { CardViewer } from '@/components/CardViewer';
 import { SettingsPage } from '@/components/SettingsPage';
-import { SyncButton } from '@/components/SyncButton';
 import { useFlashcards } from '@/hooks/useFlashcards';
 import type { Category } from '@/types/flashcard';
 import { Button } from '@/components/ui/button';
@@ -100,9 +99,6 @@ const Index = () => {
     reorderCategories,
     deleteCategory,
     updateSettings,
-    syncState,
-    fullSync,
-    isCloudSyncEnabled,
   } = useFlashcards();
 
   const [view, setView] = useState<View>('home');
@@ -246,11 +242,6 @@ const Index = () => {
                     Done
                   </Button>
                 )}
-                <SyncButton
-                  syncState={syncState}
-                  onSync={fullSync}
-                  isEnabled={isCloudSyncEnabled}
-                />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <motion.button
