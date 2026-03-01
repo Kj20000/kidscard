@@ -8,6 +8,8 @@ export const ENABLE_CLOUD_SYNC = true;
 const SYNC_BATCH_SIZE = 50;
 const PULL_PAGE_SIZE = 100;
 const TRANSIENT_FAILURE_COOLDOWN_MS = 30_000;
+const MAX_TRANSIENT_FAILURES_PER_SESSION = 3;
+const SESSION_DISABLED_ERROR = 'Cloud sync temporarily unavailable for this session. Changes are saved locally.';
  
  interface SyncResult {
    success: boolean;
@@ -142,9 +144,25 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
      isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
      pendingChanges: 0,
    });
+  const [isCloudSyncDisabledForSession, setIsCloudSyncDisabledForSession] = useState(false);
    
    const syncInProgress = useRef(false);
   const retryBlockedUntil = useRef(0);
+  const transientFailureCount = useRef(0);
+
+  const registerTransientFailure = useCallback(() => {
+    transientFailureCount.current += 1;
+    retryBlockedUntil.current = Date.now() + TRANSIENT_FAILURE_COOLDOWN_MS;
+
+    if (transientFailureCount.current >= MAX_TRANSIENT_FAILURES_PER_SESSION) {
+      setIsCloudSyncDisabledForSession(true);
+    }
+  }, []);
+
+  const resetTransientFailures = useCallback(() => {
+    transientFailureCount.current = 0;
+    retryBlockedUntil.current = 0;
+  }, []);
  
    // Track online/offline status
    useEffect(() => {
@@ -217,6 +235,10 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
   const syncToCloud = useCallback(async (): Promise<SyncResult> => {
     if (!ENABLE_CLOUD_SYNC) {
       return { success: true, error: 'Cloud sync is disabled' };
+    }
+
+    if (isCloudSyncDisabledForSession) {
+      return { success: false, error: SESSION_DISABLED_ERROR };
     }
 
     if (!syncState.isOnline) {
@@ -316,7 +338,7 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
         lastSyncedAt: Date.now(),
         pendingChanges: 0,
       }));
-      retryBlockedUntil.current = 0;
+      resetTransientFailures();
 
       return {
         success: true,
@@ -326,7 +348,7 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
     } catch (error) {
       const normalizedMessage = normalizeSyncErrorMessage(error, 'Unknown sync error');
       if (isTransientNetworkError(normalizedMessage)) {
-        retryBlockedUntil.current = Date.now() + TRANSIENT_FAILURE_COOLDOWN_MS;
+        registerTransientFailure();
       }
       if (shouldLogAsError(error)) {
         console.error('Sync failed:', error);
@@ -339,12 +361,16 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
     } finally {
       syncInProgress.current = false;
     }
-  }, [syncState.isOnline, storage]);
+  }, [isCloudSyncDisabledForSession, syncState.isOnline, storage, registerTransientFailure, resetTransientFailures]);
  
   // Pull remote changes from cloud
   const pullFromCloud = useCallback(async (): Promise<SyncResult> => {
     if (!ENABLE_CLOUD_SYNC) {
       return { success: true, error: 'Cloud sync is disabled' };
+    }
+
+    if (isCloudSyncDisabledForSession) {
+      return { success: false, error: SESSION_DISABLED_ERROR };
     }
 
     if (!syncState.isOnline) {
@@ -446,7 +472,7 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
         isSyncing: false,
         lastSyncedAt: Date.now(),
       }));
-      retryBlockedUntil.current = 0;
+      resetTransientFailures();
 
       return { 
         success: true,
@@ -456,7 +482,7 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
     } catch (error) {
       const normalizedMessage = normalizeSyncErrorMessage(error, 'Unknown pull error');
       if (isTransientNetworkError(normalizedMessage)) {
-        retryBlockedUntil.current = Date.now() + TRANSIENT_FAILURE_COOLDOWN_MS;
+        registerTransientFailure();
       }
       if (shouldLogAsError(error)) {
         console.error('Pull failed:', error);
@@ -467,11 +493,11 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
         error: normalizedMessage,
       };
     }
-  }, [syncState.isOnline, storage, mergeData]);
+  }, [isCloudSyncDisabledForSession, syncState.isOnline, storage, mergeData, registerTransientFailure, resetTransientFailures]);
  
    // Upload image to cloud storage
    const uploadImage = useCallback(async (cardId: string, imageData: string): Promise<string | null> => {
-     if (!ENABLE_CLOUD_SYNC || !syncState.isOnline) {
+     if (!ENABLE_CLOUD_SYNC || isCloudSyncDisabledForSession || !syncState.isOnline) {
        // Store locally only
        await storage.saveImage(cardId, imageData);
        return null;
@@ -484,11 +510,14 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
        return null; // Would return the public URL after upload
      } catch (error) {
        console.error('Image upload failed:', error);
+       if (error instanceof Error && isTransientNetworkError(error.message)) {
+         registerTransientFailure();
+       }
        // Fallback to local storage
        await storage.saveImage(cardId, imageData);
        return null;
      }
-   }, [syncState.isOnline, storage]);
+   }, [isCloudSyncDisabledForSession, syncState.isOnline, storage, registerTransientFailure]);
  
    // Full sync (push + pull)
    const fullSync = useCallback(async (): Promise<SyncResult> => {
@@ -509,6 +538,6 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
      uploadImage,
      mergeData,
      updatePendingCount,
-     isEnabled: ENABLE_CLOUD_SYNC,
+     isEnabled: ENABLE_CLOUD_SYNC && !isCloudSyncDisabledForSession,
    };
  }
