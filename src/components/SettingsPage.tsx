@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, Trash2, Edit3, Check, X, Upload, LogIn, LogOut, User } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Edit3, Check, X, Upload, LogIn, LogOut, User, Download, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -23,6 +23,8 @@ interface SettingsPageProps {
   onAddCategory: (category: Omit<Category, 'id'>) => void;
   onUpdateCategory: (id: string, updates: Partial<Omit<Category, 'id'>>) => void;
   onDeleteCategory: (id: string) => void;
+  onCreateLocalBackup: () => Promise<unknown>;
+  onRestoreLocalBackup: (backup: unknown) => Promise<{ categories: number; cards: number }>;
   onBack: () => void;
 }
 
@@ -42,6 +44,8 @@ export function SettingsPage({
   onAddCategory,
   onUpdateCategory,
   onDeleteCategory,
+  onCreateLocalBackup,
+  onRestoreLocalBackup,
   onBack,
 }: SettingsPageProps) {
   const navigate = useNavigate();
@@ -82,6 +86,8 @@ export function SettingsPage({
   const [newCardCategory, setNewCardCategory] = useState(categories[0]?.id || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
+  const restoreFileInputRef = useRef<HTMLInputElement>(null);
+  const [isBackupBusy, setIsBackupBusy] = useState(false);
 
   // Edit card form state
   const [editCardWord, setEditCardWord] = useState('');
@@ -194,6 +200,52 @@ export function SettingsPage({
         setEditCardImage(reader.result as string);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleBackup = async () => {
+    if (isBackupBusy) return;
+
+    setIsBackupBusy(true);
+    try {
+      const backupData = await onCreateLocalBackup();
+      const backupJson = JSON.stringify(backupData, null, 2);
+      const blob = new Blob([backupJson], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `kids-cards-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      toast.success('Backup saved to this device');
+    } catch (error) {
+      console.error('Backup failed:', error);
+      toast.error('Backup failed');
+    } finally {
+      setIsBackupBusy(false);
+    }
+  };
+
+  const handleRestoreFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || isBackupBusy) return;
+
+    setIsBackupBusy(true);
+    try {
+      const rawText = await file.text();
+      const parsed = JSON.parse(rawText);
+      const result = await onRestoreLocalBackup(parsed);
+      toast.success(`Restored ${result.cards} cards in ${result.categories} categories`);
+    } catch (error) {
+      console.error('Restore failed:', error);
+      toast.error(error instanceof Error ? error.message : 'Restore failed');
+    } finally {
+      if (restoreFileInputRef.current) {
+        restoreFileInputRef.current.value = '';
+      }
+      setIsBackupBusy(false);
     }
   };
 
@@ -681,6 +733,46 @@ export function SettingsPage({
                 checked={settings.repeatAudio}
                 onCheckedChange={(checked) => onUpdateSettings({ repeatAudio: checked })}
               />
+            </div>
+          </Card>
+
+          <Card className="p-4 rounded-2xl">
+            <div className="space-y-3">
+              <div>
+                <p className="font-bold text-lg">Backup & Restore</p>
+                <p className="text-sm text-muted-foreground">
+                  Save or restore all cards on this device
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleBackup}
+                  disabled={isBackupBusy}
+                  className="h-10 w-10 p-0 rounded-xl"
+                  title="Backup to device"
+                >
+                  <Download className="w-4 h-4" />
+                </Button>
+
+                <input
+                  type="file"
+                  accept="application/json"
+                  ref={restoreFileInputRef}
+                  onChange={handleRestoreFileSelected}
+                  className="hidden"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => restoreFileInputRef.current?.click()}
+                  disabled={isBackupBusy}
+                  className="h-10 w-10 p-0 rounded-xl"
+                  title="Restore from backup"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           </Card>
         </div>

@@ -99,6 +99,8 @@ const Index = () => {
     reorderCategories,
     deleteCategory,
     updateSettings,
+    createLocalBackup,
+    restoreLocalBackup,
   } = useFlashcards();
 
   const [view, setView] = useState<View>('home');
@@ -342,6 +344,8 @@ const Index = () => {
               onAddCategory={addCategory}
               onUpdateCategory={updateCategory}
               onDeleteCategory={deleteCategory}
+              onCreateLocalBackup={createLocalBackup}
+              onRestoreLocalBackup={restoreLocalBackup}
               onBack={handleBack}
             />
           </motion.div>

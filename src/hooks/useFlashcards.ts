@@ -23,6 +23,20 @@ const sortCategories = (items: Category[]) =>
     return aCreated - bCreated;
   });
 
+const VALID_CATEGORY_COLORS: Category['color'][] = ['coral', 'mint', 'sky', 'lavender', 'sunshine', 'peach'];
+const VALID_THEMES: AppSettings['theme'][] = ['sunshine', 'ocean', 'berry'];
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+export interface LocalBackupData {
+  version: 1;
+  exportedAt: string;
+  categories: Category[];
+  cards: Flashcard[];
+  settings: AppSettings;
+}
+
 const isTransientCloudError = (message: string) => {
   const normalized = message.toLowerCase();
   return (
@@ -55,8 +69,6 @@ export function useFlashcards() {
   const [isLoading, setIsLoading] = useState(true);
   
   const initialized = useRef(false);
-  const cloudHydrationInProgress = useRef(false);
-  const cloudHydrationBlockedUntil = useRef(0);
   const cloudSyncTimer = useRef<number | null>(null);
   const autoSyncInProgress = useRef(false);
   const lastAutoSyncAt = useRef(0);
@@ -76,45 +88,6 @@ export function useFlashcards() {
       toast.success('Categories restored', { duration: 250 });
     }
   }, [storage]);
-
-  const hydrateFromCloud = useCallback(async () => {
-    if (!ENABLE_CLOUD_SYNC || !sync.syncState.isOnline || cloudHydrationInProgress.current) {
-      return;
-    }
-
-    if (Date.now() < cloudHydrationBlockedUntil.current) {
-      return;
-    }
-
-    cloudHydrationInProgress.current = true;
-
-    try {
-      const maxAttempts = 2;
-      let syncResult = { success: false, error: 'Cloud pull did not start' };
-
-      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-        syncResult = await sync.pullFromCloud();
-        if (syncResult.success) break;
-
-        if (syncResult.error && isTransientCloudError(syncResult.error)) {
-          cloudHydrationBlockedUntil.current = Date.now() + 30_000;
-          break;
-        }
-
-        if (attempt < maxAttempts) {
-          await new Promise((resolve) => window.setTimeout(resolve, 250));
-        }
-      }
-
-      if (syncResult.success) {
-        await refreshFromStorage();
-      }
-    } catch (error) {
-      console.error('Cloud hydration failed:', error);
-    } finally {
-      cloudHydrationInProgress.current = false;
-    }
-  }, [refreshFromStorage, sync]);
 
   const scheduleCloudSync = useCallback((delayMs: number = SYNC_DEBOUNCE_MS) => {
     if (!ENABLE_CLOUD_SYNC || !sync.isEnabled || !sync.syncState.isOnline) {
@@ -155,18 +128,17 @@ export function useFlashcards() {
         setSettings(storage.DEFAULT_SETTINGS);
       } finally {
         setIsLoading(false);
-        hydrateFromCloud();
       }
     };
 
     loadData();
-  }, [hydrateFromCloud, refreshFromStorage, storage]);
+  }, [refreshFromStorage, storage]);
 
   // Re-hydrate from cloud immediately after auth is established/refreshed
   useEffect(() => {
     if (!ENABLE_CLOUD_SYNC) return;
 
-    const runAutoSync = async (event: 'SIGNED_IN' | 'INITIAL_SESSION', showSyncedToast: boolean) => {
+    const runAutoSync = async (showSyncedToast: boolean) => {
       if (!sync.syncState.isOnline) return;
 
       if (autoSyncInProgress.current) return;
@@ -178,9 +150,7 @@ export function useFlashcards() {
       lastAutoSyncAt.current = now;
 
       try {
-        const syncResult = event === 'INITIAL_SESSION'
-          ? await sync.pullFromCloud()
-          : await sync.fullSync();
+        const syncResult = await sync.fullSync();
 
         if (!syncResult.success) {
           if (syncResult.error && !isTransientCloudError(syncResult.error)) {
@@ -201,8 +171,8 @@ export function useFlashcards() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session?.user) return;
 
-      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-        void runAutoSync(event, event === 'SIGNED_IN');
+      if (event === 'SIGNED_IN') {
+        void runAutoSync(true);
       }
     });
 
@@ -213,6 +183,110 @@ export function useFlashcards() {
     (categoryId: string) => cards.filter((card) => card.categoryId === categoryId),
     [cards]
   );
+
+  const createLocalBackup = useCallback(async (): Promise<LocalBackupData> => {
+    const [storedCategories, storedCards, storedSettings] = await Promise.all([
+      storage.getAllCategories(),
+      storage.getAllCards(),
+      storage.getSettings(),
+    ]);
+
+    return {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      categories: storedCategories,
+      cards: storedCards,
+      settings: { ...storage.DEFAULT_SETTINGS, ...storedSettings },
+    };
+  }, [storage]);
+
+  const restoreLocalBackup = useCallback(async (payload: unknown) => {
+    if (!isRecord(payload)) {
+      throw new Error('Invalid backup file');
+    }
+
+    const rawCategories = Array.isArray(payload.categories) ? payload.categories : null;
+    const rawCards = Array.isArray(payload.cards) ? payload.cards : null;
+    const rawSettings = isRecord(payload.settings) ? payload.settings : null;
+
+    if (!rawCategories || !rawCards || !rawSettings) {
+      throw new Error('Backup is missing categories, cards, or settings');
+    }
+
+    const now = Date.now();
+    const restoredCategories: Category[] = rawCategories
+      .filter((item): item is Record<string, unknown> => isRecord(item))
+      .map((item, index) => {
+        const color = typeof item.color === 'string' && VALID_CATEGORY_COLORS.includes(item.color as Category['color'])
+          ? (item.color as Category['color'])
+          : 'coral';
+
+        return {
+          id: String(item.id ?? generateClientId('cat')),
+          name: String(item.name ?? '').trim(),
+          icon: String(item.icon ?? '📚'),
+          color,
+          order: typeof item.order === 'number' ? item.order : index,
+          createdAt: typeof item.createdAt === 'number' ? item.createdAt : now,
+          updatedAt: now,
+          syncStatus: 'pending',
+        };
+      })
+      .filter((category) => category.name.length > 0);
+
+    if (restoredCategories.length === 0) {
+      throw new Error('Backup has no valid categories');
+    }
+
+    const categoryIds = new Set(restoredCategories.map((category) => category.id));
+    const restoredCards: Flashcard[] = rawCards
+      .filter((item): item is Record<string, unknown> => isRecord(item))
+      .map((item) => ({
+        id: String(item.id ?? generateClientId('card')),
+        word: String(item.word ?? '').trim(),
+        imageUrl: String(item.imageUrl ?? '').trim(),
+        categoryId: String(item.categoryId ?? ''),
+        createdAt: typeof item.createdAt === 'number' ? item.createdAt : now,
+        updatedAt: now,
+        syncStatus: 'pending' as const,
+      }))
+      .filter((card) => card.word.length > 0 && card.imageUrl.length > 0 && categoryIds.has(card.categoryId));
+
+    const restoredSettings: AppSettings = {
+      autoPlayAudio: typeof rawSettings.autoPlayAudio === 'boolean'
+        ? rawSettings.autoPlayAudio
+        : storage.DEFAULT_SETTINGS.autoPlayAudio,
+      voiceSpeed: rawSettings.voiceSpeed === 'slow' ? 'slow' : 'normal',
+      repeatAudio: typeof rawSettings.repeatAudio === 'boolean'
+        ? rawSettings.repeatAudio
+        : storage.DEFAULT_SETTINGS.repeatAudio,
+      theme: typeof rawSettings.theme === 'string' && VALID_THEMES.includes(rawSettings.theme as AppSettings['theme'])
+        ? (rawSettings.theme as AppSettings['theme'])
+        : storage.DEFAULT_SETTINGS.theme,
+      enableCloudSync: typeof rawSettings.enableCloudSync === 'boolean'
+        ? rawSettings.enableCloudSync
+        : storage.DEFAULT_SETTINGS.enableCloudSync,
+    };
+
+    const orderedCategories = sortCategories(restoredCategories);
+
+    setCategories(orderedCategories);
+    setCards(restoredCards);
+    setSettings(restoredSettings);
+
+    await Promise.all([
+      storage.saveAllCategories(orderedCategories),
+      storage.saveAllCards(restoredCards),
+      storage.saveSettings(restoredSettings),
+    ]);
+
+    await sync.updatePendingCount();
+
+    return {
+      categories: orderedCategories.length,
+      cards: restoredCards.length,
+    };
+  }, [storage, sync]);
 
   const addCard = useCallback(async (card: Omit<Flashcard, 'id'>) => {
     const now = Date.now();
@@ -398,6 +472,8 @@ export function useFlashcards() {
     // Image operations
     saveCardImage,
     getCardImage,
+    createLocalBackup,
+    restoreLocalBackup,
     // Sync state and operations
     syncState: sync.syncState,
     syncToCloud: sync.syncToCloud,
