@@ -35,6 +35,9 @@ const isTransientCloudError = (message: string) => {
   );
 };
 
+const SYNC_DEBOUNCE_MS = 8_000;
+const AUTO_SYNC_COOLDOWN_MS = 60_000;
+
 
 export function useFlashcards() {
   const storage = useOfflineStorage();
@@ -54,6 +57,9 @@ export function useFlashcards() {
   const initialized = useRef(false);
   const cloudHydrationInProgress = useRef(false);
   const cloudHydrationBlockedUntil = useRef(0);
+  const cloudSyncTimer = useRef<number | null>(null);
+  const autoSyncInProgress = useRef(false);
+  const lastAutoSyncAt = useRef(0);
 
   const refreshFromStorage = useCallback(async () => {
     const [loadedCategories, loadedCards, loadedSettings] = await Promise.all([
@@ -102,7 +108,6 @@ export function useFlashcards() {
 
       if (syncResult.success) {
         await refreshFromStorage();
-        sync.syncToCloud();
       }
     } catch (error) {
       console.error('Cloud hydration failed:', error);
@@ -110,6 +115,29 @@ export function useFlashcards() {
       cloudHydrationInProgress.current = false;
     }
   }, [refreshFromStorage, sync]);
+
+  const scheduleCloudSync = useCallback((delayMs: number = SYNC_DEBOUNCE_MS) => {
+    if (!ENABLE_CLOUD_SYNC || !sync.isEnabled || !sync.syncState.isOnline) {
+      return;
+    }
+
+    if (cloudSyncTimer.current !== null) {
+      window.clearTimeout(cloudSyncTimer.current);
+    }
+
+    cloudSyncTimer.current = window.setTimeout(() => {
+      cloudSyncTimer.current = null;
+      void sync.syncToCloud();
+    }, delayMs);
+  }, [sync.isEnabled, sync.syncState.isOnline, sync.syncToCloud]);
+
+  useEffect(() => {
+    return () => {
+      if (cloudSyncTimer.current !== null) {
+        window.clearTimeout(cloudSyncTimer.current);
+      }
+    };
+  }, []);
 
   // Load data from IndexedDB on mount
   useEffect(() => {
@@ -138,20 +166,35 @@ export function useFlashcards() {
   useEffect(() => {
     if (!ENABLE_CLOUD_SYNC) return;
 
-    const runAutoSync = async (showSyncedToast: boolean) => {
+    const runAutoSync = async (event: 'SIGNED_IN' | 'INITIAL_SESSION', showSyncedToast: boolean) => {
       if (!sync.syncState.isOnline) return;
 
-      const syncResult = await sync.fullSync();
-      if (!syncResult.success) {
-        if (syncResult.error && !isTransientCloudError(syncResult.error)) {
-          toast.error(syncResult.error);
-        }
-        return;
-      }
+      if (autoSyncInProgress.current) return;
 
-      await refreshFromStorage();
-      if (showSyncedToast) {
-        toast.success('Synced', { duration: 250 });
+      const now = Date.now();
+      if (now - lastAutoSyncAt.current < AUTO_SYNC_COOLDOWN_MS) return;
+
+      autoSyncInProgress.current = true;
+      lastAutoSyncAt.current = now;
+
+      try {
+        const syncResult = event === 'INITIAL_SESSION'
+          ? await sync.pullFromCloud()
+          : await sync.fullSync();
+
+        if (!syncResult.success) {
+          if (syncResult.error && !isTransientCloudError(syncResult.error)) {
+            toast.error(syncResult.error);
+          }
+          return;
+        }
+
+        await refreshFromStorage();
+        if (showSyncedToast) {
+          toast.success('Synced', { duration: 250 });
+        }
+      } finally {
+        autoSyncInProgress.current = false;
       }
     };
 
@@ -159,12 +202,12 @@ export function useFlashcards() {
       if (!session?.user) return;
 
       if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-        void runAutoSync(event === 'SIGNED_IN');
+        void runAutoSync(event, event === 'SIGNED_IN');
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [refreshFromStorage, sync.fullSync, sync.syncState.isOnline]);
+  }, [refreshFromStorage, sync.fullSync, sync.pullFromCloud, sync.syncState.isOnline]);
 
   const getCardsByCategory = useCallback(
     (categoryId: string) => cards.filter((card) => card.categoryId === categoryId),
@@ -189,12 +232,12 @@ export function useFlashcards() {
       sync.updatePendingCount();
       // Trigger background sync if enabled
       if (ENABLE_CLOUD_SYNC && sync.syncState.isOnline) {
-        sync.syncToCloud();
+        scheduleCloudSync();
       }
     });
     
     return newCard;
-  }, [cards, storage, sync]);
+  }, [cards, storage, sync, scheduleCloudSync]);
 
   const updateCard = useCallback(async (id: string, updates: Partial<Omit<Flashcard, 'id'>>) => {
     const updatedCards = cards.map((card) =>
@@ -208,10 +251,10 @@ export function useFlashcards() {
     storage.saveAllCards(updatedCards).then(() => {
       sync.updatePendingCount();
       if (ENABLE_CLOUD_SYNC && sync.syncState.isOnline) {
-        sync.syncToCloud();
+        scheduleCloudSync();
       }
     });
-  }, [cards, storage, sync]);
+  }, [cards, storage, sync, scheduleCloudSync]);
 
   const deleteCard = useCallback(async (id: string) => {
     const updatedCards = cards.filter((card) => card.id !== id);
@@ -241,12 +284,12 @@ export function useFlashcards() {
     storage.saveAllCategories(updatedCategories).then(() => {
       sync.updatePendingCount();
       if (ENABLE_CLOUD_SYNC && sync.syncState.isOnline) {
-        sync.syncToCloud();
+        scheduleCloudSync();
       }
     });
     
     return newCategory;
-  }, [categories, storage, sync]);
+  }, [categories, storage, sync, scheduleCloudSync]);
 
   const updateCategory = useCallback(async (id: string, updates: Partial<Omit<Category, 'id'>>) => {
     const updatedCategories = sortCategories(categories.map((cat) =>
@@ -259,10 +302,10 @@ export function useFlashcards() {
     storage.saveAllCategories(updatedCategories).then(() => {
       sync.updatePendingCount();
       if (ENABLE_CLOUD_SYNC && sync.syncState.isOnline) {
-        sync.syncToCloud();
+        scheduleCloudSync();
       }
     });
-  }, [categories, storage, sync]);
+  }, [categories, storage, sync, scheduleCloudSync]);
 
   const deleteCategory = useCallback(async (id: string) => {
     const updatedCategories = sortCategories(categories.filter((cat) => cat.id !== id));
@@ -300,10 +343,10 @@ export function useFlashcards() {
     storage.saveAllCategories(updatedCategories).then(() => {
       sync.updatePendingCount();
       if (ENABLE_CLOUD_SYNC && sync.syncState.isOnline) {
-        sync.syncToCloud();
+        scheduleCloudSync();
       }
     });
-  }, [categories, storage, sync]);
+  }, [categories, storage, sync, scheduleCloudSync]);
 
   const updateSettings = useCallback(async (updates: Partial<AppSettings>) => {
     const newSettings = { ...settings, ...updates };
@@ -360,6 +403,6 @@ export function useFlashcards() {
     syncToCloud: sync.syncToCloud,
     pullFromCloud: sync.pullFromCloud,
     fullSync: sync.fullSync,
-    isCloudSyncEnabled: ENABLE_CLOUD_SYNC,
+    isCloudSyncEnabled: sync.isEnabled,
   };
 }

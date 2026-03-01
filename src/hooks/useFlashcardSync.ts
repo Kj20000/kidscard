@@ -253,6 +253,13 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
       return { success: false, error: 'Sync already in progress' };
     }
 
+    const pendingCards = await storage.getPendingCards();
+    const pendingCategories = await storage.getPendingCategories();
+
+    if (pendingCards.length === 0 && pendingCategories.length === 0) {
+      return { success: true, syncedCards: 0, syncedCategories: 0 };
+    }
+
     try {
       syncInProgress.current = true;
       setSyncState(prev => ({ ...prev, isSyncing: true }));
@@ -264,9 +271,6 @@ const remapCardsCategoryIds = (cards: Flashcard[], idRemap: Map<string, string>)
         setSyncState(prev => ({ ...prev, isSyncing: false }));
         return { success: false, error: 'Please sign in to sync' };
       }
-
-      const pendingCards = await storage.getPendingCards();
-      const pendingCategories = await storage.getPendingCategories();
 
       // Sync categories first (flashcards depend on them)
       if (pendingCategories.length > 0) {
